@@ -91,7 +91,8 @@ class Auth {
     this.showToast('Demo access granted', 'success');
     this.showDashboard();
     }
-
+  
+/*
     register() {
         const fullName = document.getElementById('register-fullname').value.trim();
         const username = document.getElementById('register-username').value.trim();
@@ -147,6 +148,7 @@ class Auth {
         
         this.showDashboard();
     }
+    */
 
     createDefaultAccounts(initialDeposit) {
         const checkingBalance = initialDeposit * 0.7;
