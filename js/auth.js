@@ -74,31 +74,22 @@ class Auth {
 
     login() {
         const username = document.getElementById('login-username').value.trim();
-        const password = document.getElementById('login-password').value;
 
-        
-        const users = JSON.parse(localStorage.getItem('users') || '{}');
+    if (!username) {
+        this.showToast('Enter any name to continue demo', 'error');
+        return;
+    }
 
-        if (users[username] && users[username].password === password) {
-            
-            this.currentUser = {
-                username: username,
-                fullName: users[username].fullName,
-                accounts: users[username].accounts || this.createDefaultAccounts(users[username].initialDeposit)
-            };
+    this.currentUser = {
+        username: username,
+        fullName: username,
+        accounts: this.createDefaultAccounts(1000)
+    };
 
-            
-            localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+    localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
 
-            
-            this.showToast('Login successful!', 'success');
-
-           
-            this.showDashboard();
-        } else {
-            
-            this.showToast('Invalid username or password', 'error');
-        }
+    this.showToast('Demo access granted', 'success');
+    this.showDashboard();
     }
 
     register() {
@@ -210,16 +201,7 @@ class Auth {
     }
 
     forgotPassword() {
-        const username = prompt('Enter your username to reset password:');
-        if (!username) return;
-
-        const users = JSON.parse(localStorage.getItem('users') || '{}');
-        if (users[username]) {
-            
-            alert('Password reset instructions would be sent to your registered email.');
-        } else {
-            alert('Username not found.');
-        }
+        alert('this is a demo project. Password recovery is disabled');
     }
 
     showDashboard() {
