@@ -8,6 +8,7 @@ const envSchema = z.object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.string().default('5000'),
     DATABASE_URL: z.string(),
+    FRONTEND_URL: z.string().default('http://localhost:5173')
 });
 
 
