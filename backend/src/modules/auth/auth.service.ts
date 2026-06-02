@@ -1,10 +1,9 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { env } from '../../config/env.js';
 
-const prisma = new PrismaClient();
 
 interface RegisterInput {
     firstName: string;
