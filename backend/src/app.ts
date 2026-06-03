@@ -6,10 +6,13 @@ import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import cookieParser from 'cookie-parser';
 import authRoutes from './modules/auth/auth.routes.js';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './docs/swagger.js';
 
 
 const app = express();
 
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.use(helmet());
 app.use(cors({
