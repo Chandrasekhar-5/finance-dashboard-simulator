@@ -589,3 +589,488 @@ Current backend includes:
 - Setup route architecture
 - Create service layer
 - Begin authentication module
+
+---
+
+# Day 04 — Authentication System Implementation
+
+## Work Completed
+
+Today's focus was implementing the authentication system architecture and establishing proper separation between validation, business logic, and HTTP handling.
+
+---
+
+# Installed Authentication Dependencies
+
+Installed:
+
+```bash
+npm install bcrypt jsonwebtoken cookie-parser
+```
+
+Installed types:
+
+```bash
+npm install -D \
+@types/bcrypt \
+@types/jsonwebtoken \
+@types/cookie-parser
+```
+
+Purpose:
+
+- bcrypt → password hashing
+- jsonwebtoken → authentication tokens
+- cookie-parser → cookie handling
+
+---
+
+# Custom Error Architecture
+
+Created:
+
+```txt
+src/utils/AppError.ts
+```
+
+Purpose:
+
+- standardized application errors
+- centralized status codes
+- consistent error handling
+
+---
+
+# AppError Design
+
+Created a custom class extending:
+
+```ts
+Error
+```
+
+Included:
+
+- message
+- statusCode
+
+Also used:
+
+```ts
+Error.captureStackTrace()
+```
+
+Purpose:
+
+- cleaner debugging
+- preserve stack trace integrity
+
+---
+
+# Request Validation Middleware
+
+Created:
+
+```txt
+src/middleware/validate.ts
+```
+
+Purpose:
+
+- validate requests before reaching controllers
+- reject invalid payloads automatically
+- centralize request validation
+
+---
+
+# Validation Flow
+
+Incoming Request
+
+↓
+
+Validation Middleware
+
+↓
+
+Zod Schema Check
+
+↓
+
+Valid Request → Continue
+
+OR
+
+↓
+
+Invalid Request → Return 400
+
+---
+
+# Validation Strategy
+
+The middleware validates:
+
+```ts
+req.body
+
+req.query
+
+req.params
+```
+
+using:
+
+```ts
+schema.parseAsync()
+```
+
+---
+
+# Validation Failure Response
+
+Invalid requests return:
+
+```json
+{
+   "success": false,
+   "message": "Validation Error",
+   "details": [...]
+}
+```
+
+Validation details include:
+
+- field path
+- failure message
+
+---
+
+# Authentication Module Structure
+
+Created:
+
+```txt
+src/modules/auth/
+```
+
+Goal:
+
+Separate:
+
+- schemas
+- business logic
+- HTTP handling
+
+This improves:
+
+- maintainability
+- testing
+- scalability
+
+---
+
+# Authentication Schemas
+
+Created:
+
+```txt
+auth.schema.ts
+```
+
+Implemented:
+
+## Register Schema
+
+Fields:
+
+- firstName
+- lastName
+- email
+- password
+
+---
+
+## Login Schema
+
+Fields:
+
+- email
+- password
+
+---
+
+# Authentication Service Layer
+
+Created:
+
+```txt
+auth.service.ts
+```
+
+Purpose:
+
+Contains business logic only.
+
+Controllers should not contain business rules.
+
+---
+
+# Register Flow
+
+Registration performs:
+
+1. Check existing user
+
+2. Throw error if exists
+
+3. Hash password
+
+4. Create user
+
+5. Generate tokens
+
+6. Return tokens
+
+---
+
+# Login Flow
+
+Login performs:
+
+1. Find user
+
+2. Validate existence
+
+3. Compare password
+
+4. Generate tokens
+
+5. Return tokens
+
+---
+
+# Password Security
+
+Used:
+
+```ts
+bcrypt.hash()
+```
+
+and:
+
+```ts
+bcrypt.compare()
+```
+
+Passwords are never stored directly.
+
+---
+
+# Token Generation
+
+Authentication generates:
+
+## Access Token
+
+Used for:
+
+- authenticated requests
+
+---
+
+## Refresh Token
+
+Used for:
+
+- session renewal
+
+---
+
+# Authentication Controller Layer
+
+Created:
+
+```txt
+auth.controller.ts
+```
+
+Responsibilities:
+
+- receive requests
+- call services
+- return responses
+
+Controllers remain thin.
+
+---
+
+# Cookie Handling
+
+Refresh token is stored inside:
+
+```txt
+HTTP Cookies
+```
+
+This allows:
+
+- persistent sessions
+- refresh token separation
+
+---
+
+# Logout Flow
+
+Logout performs:
+
+1. Clear refresh token cookie
+
+2. Return success response
+
+---
+
+# Authentication Routes
+
+Created routes:
+
+```txt
+POST /register
+
+POST /login
+
+POST /logout
+```
+
+---
+
+# Route Validation
+
+Routes use:
+
+```ts
+validate(schema)
+```
+
+before controllers.
+
+This ensures invalid requests never reach business logic.
+
+---
+
+# App Integration
+
+Updated:
+
+```txt
+src/app.ts
+```
+
+Added:
+
+```ts
+cookieParser()
+```
+
+Mounted:
+
+```ts
+/api/v1/auth
+```
+
+---
+
+# Testing
+
+Authentication system was tested using multiple scenarios.
+
+Tested:
+
+- valid requests
+- invalid payloads
+- duplicate users
+- login failures
+- logout behavior
+
+---
+
+# Architecture Achieved
+
+Current auth architecture:
+
+```txt
+Request
+
+↓
+
+Routes
+
+↓
+
+Validation Middleware
+
+↓
+
+Controller
+
+↓
+
+Service Layer
+
+↓
+
+Database
+```
+
+---
+
+# Learnings
+
+Today's work reinforced:
+
+- layered backend architecture
+
+- request validation patterns
+
+- authentication design
+
+- service layer separation
+
+- token-based authentication
+
+- centralized error management
+
+---
+
+# Current Authentication Status
+
+✓ Register
+
+✓ Login
+
+✓ Logout
+
+✓ Validation Middleware
+
+✓ Password Hashing
+
+✓ JWT Generation
+
+✓ Cookie Handling
+
+✓ Service Layer Separation
+
+---
+
+# Next Steps
+
+- Refresh token flow
+
+- Authentication middleware
+
+- Protected routes
+
+- Role handling
+
+- Session security improvements
