@@ -44,7 +44,7 @@ export const AuthService = {
         if (!user) throw new AppError('Invalid email or password', 401);
 
         const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
-        if (!isPasswordValid) throw new AppError('Invalid creadentials', 401);
+        if (!isPasswordValid) throw new AppError('Invalid credentials', 401);
 
         return this.generateToken(user.id);
     },

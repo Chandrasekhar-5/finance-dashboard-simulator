@@ -1,4 +1,6 @@
 import swaggerJSDoc from 'swagger-jsdoc';
+import { responses } from './components/responses.js';
+import { schemas } from './components/schemas.js';
 
 const options: swaggerJSDoc.Options = {
     definition: {
@@ -15,7 +17,15 @@ const options: swaggerJSDoc.Options = {
                 url: 'http://localhost:5000',
                 description: 'Development server'
             }
-        ]
+        ],
+
+        components: {
+
+            responses,
+
+            schemas
+            
+        }
     },
 
     apis: ['./src/modules/**/*.ts']

@@ -30,6 +30,6 @@ export const AuthController = {
 
     async logout(req: Request, res: Response) {
         res.clearCookie('refreshToken');
-        res.status(200).json({ success: true, messafe: 'Logged out successfully' });
+        res.status(200).json({ success: true, message: 'Logged out successfully' });
     }
 };
