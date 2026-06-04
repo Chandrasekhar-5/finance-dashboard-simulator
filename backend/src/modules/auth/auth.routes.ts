@@ -169,9 +169,82 @@ router.post('/login', validate(loginSchema), AuthController.login);
 router.post('/logout', AuthController.logout);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/refresh:
+ *   post:
+ *     summary: Refresh a user's access token
+ *     tags:
+ *       - Authentication
+ * 
+ *     responses:
+ *       200:
+ *         description: User's access token refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ * 
+ *       401:
+ *         description: Invalid or expired refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ * 
+ *                 error:
+ *                   type: string
+ *                   example: Invalid or expired refresh token
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.post('/refresh', AuthController.refresh);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/me:
+ *   get:
+ *     summary: Get current user
+ *     tags:
+ *       - Authentication
+ * 
+ *     security:
+ *       - bearerAuth: []
+ * 
+ *     responses:
+ *       200:
+ *         description: Current user details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ * 
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ * 
+ *                 error:
+ *                   type: string
+ *                   example: Unauthorized
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.get('/me', requireAuth, AuthController.getme);
 
 
