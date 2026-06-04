@@ -49,6 +49,21 @@ export const AuthService = {
         return this.generateToken(user.id);
     },
 
+    async refreshToken(refreshToken: string) {
+        try {
+
+            const decoded = jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET) as { userId: string };
+
+            const user  = await prisma.user.findUnique({ where: { id: decoded.userId } });
+
+            if (!user) throw new AppError('User not found', 404);
+
+            return this.generateToken(user.id);
+        } catch (error) {
+            throw new AppError('Invalid or expired refresh token', 401);
+        }
+    },
+
     async generateToken(userId: string) {
         const accessToken = jwt.sign({ userId }, env.ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
         const refreshToken = jwt.sign({ userId }, env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });

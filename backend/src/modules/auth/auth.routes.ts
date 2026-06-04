@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AuthController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
 import { registerSchema, loginSchema } from './auth.schema.js';
+import { requireAuth } from '../../middleware/requireAuth.js';
 
 
 const router = Router();
@@ -166,6 +167,12 @@ router.post('/login', validate(loginSchema), AuthController.login);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/logout', AuthController.logout);
+
+
+router.post('/refresh', AuthController.refresh);
+
+
+router.get('/me', requireAuth, AuthController.getme);
 
 
 export default router;
