@@ -1074,3 +1074,750 @@ Today's work reinforced:
 - Role handling
 
 - Session security improvements
+
+---
+
+# API Documentation Setup
+
+Implemented Swagger documentation support.
+
+Installed:
+
+```bash
+npm install swagger-ui-express
+
+npm install swagger-jsdoc
+```
+
+Installed development types:
+
+```bash
+npm install -D @types/swagger-ui-express
+
+npm install -D @types/swagger-jsdoc
+```
+
+---
+
+# Purpose of Swagger Integration
+
+Swagger was added to provide:
+
+- API documentation
+- endpoint discoverability
+- easier frontend/backend collaboration
+- simplified testing
+- interactive API exploration
+
+---
+
+# Swagger Configuration
+
+Created:
+
+```txt
+src/swagger.ts
+```
+
+Configured:
+
+## OpenAPI Version
+
+```txt
+openapi
+```
+
+Defines API specification version.
+
+---
+
+## Information Block
+
+Configured:
+
+- title
+- version
+- description
+
+Purpose:
+
+Provide metadata about the backend API.
+
+---
+
+## Servers Configuration
+
+Defined:
+
+- URL
+- Description
+
+Purpose:
+
+Allows API consumers to understand available environments.
+
+---
+
+## API Scanning
+
+Configured:
+
+```txt
+apis
+```
+
+Used for automatic route documentation discovery.
+
+---
+
+# Generated Swagger Specification
+
+Created:
+
+```ts
+swaggerSpec
+```
+
+which exports generated OpenAPI specifications.
+
+---
+
+# App Integration
+
+Updated:
+
+```txt
+src/app.ts
+```
+
+Added:
+
+```ts
+app.use(
+   "/api-docs",
+   swaggerUi.serve,
+   swaggerUi.setup(swaggerSpec)
+)
+```
+
+---
+
+# Documentation Endpoint
+
+Swagger UI is now available at:
+
+```txt
+/api-docs
+```
+
+Purpose:
+
+- inspect APIs visually
+- test endpoints directly
+- verify request/response formats
+
+---
+
+# Current Backend Capabilities
+
+Current backend now includes:
+
+✓ Authentication
+
+✓ Validation Middleware
+
+✓ JWT Handling
+
+✓ Error Handling
+
+✓ Swagger Documentation
+
+✓ Interactive API Testing
+
+✓ Health Check Route
+
+---
+
+# Learnings
+
+Today's Swagger integration reinforced:
+
+- API-first development
+
+- OpenAPI specifications
+
+- backend documentation workflows
+
+- frontend/backend collaboration practices
+
+---
+
+# Why Documentation Early Matters
+
+Adding documentation early prevents:
+
+- undocumented endpoints
+
+- frontend confusion
+
+- inconsistent request structures
+
+- API maintenance problems
+
+Swagger becomes more valuable as modules increase.
+
+---
+
+
+---
+
+
+# Swagger Documentation Architecture Improvements
+
+Created:
+
+```txt
+src/docs/components/
+```
+
+Purpose:
+
+Create reusable documentation components rather than repeating schemas and responses across routes.
+
+---
+
+# Reusable Responses
+
+Created:
+
+```txt
+src/docs/components/responses.ts
+```
+
+Contains reusable response definitions.
+
+Examples:
+
+- InternalServerError (500)
+- Unauthorized (401)
+- Forbidden (403)
+- BadRequest (400)
+- NotFound (404)
+- Conflict (409)
+
+Purpose:
+
+- reduce duplication
+- standardize API documentation
+- simplify maintenance
+
+---
+
+# Reusable Schemas
+
+Created:
+
+```txt
+src/docs/components/schemas.ts
+```
+
+Contains reusable response schemas.
+
+Examples:
+
+- AuthResponse
+- UserResponse
+- TransactionResponse
+- AccountResponse
+
+Purpose:
+
+- centralize schema definitions
+- reuse response structures
+- maintain consistency
+
+---
+
+# Swagger Refactoring
+
+Updated:
+
+```txt
+src/swagger.ts
+```
+
+Added:
+
+```txt
+components
+```
+
+which now includes:
+
+- reusable schemas
+- reusable responses
+
+This improves long-term maintainability as modules increase.
+
+---
+
+# Authentication Documentation Improvements
+
+Added API documentation to:
+
+## Register
+
+Added:
+
+- 201 responses
+- error responses
+
+---
+
+## Login
+
+Added:
+
+- 200 responses
+- error responses
+
+---
+
+## Logout
+
+Added:
+
+- reusable error responses
+
+---
+
+# Extending Express Request Type
+
+Problem:
+
+Express Request does not know custom properties.
+
+Needed:
+
+```ts
+req.user
+```
+
+Created:
+
+```txt
+src/types/express.d.ts
+```
+
+Extended:
+
+```ts
+Express.Request
+```
+
+Added:
+
+```ts
+user
+```
+
+property.
+
+---
+
+# TypeScript Configuration Update
+
+Updated:
+
+```txt
+tsconfig.json
+```
+
+Added:
+
+```txt
+typeRoots
+```
+
+Purpose:
+
+Allow TypeScript to discover custom declaration files.
+
+---
+
+# Authentication Middleware
+
+Created:
+
+```txt
+src/middleware/requireAuth.ts
+```
+
+Purpose:
+
+Protect authenticated routes.
+
+---
+
+# Authentication Flow
+
+Request
+
+↓
+
+Authorization Header
+
+↓
+
+Extract Bearer Token
+
+↓
+
+Verify JWT
+
+↓
+
+Attach User Context
+
+↓
+
+Continue Request
+
+---
+
+# Token Validation Logic
+
+Checks:
+
+## Missing Authorization Header
+
+Returns:
+
+```txt
+401 Unauthorized
+```
+
+---
+
+## Invalid Token Format
+
+Returns:
+
+```txt
+401 Unauthorized
+```
+
+---
+
+## Expired Token
+
+Returns:
+
+```txt
+401 Unauthorized
+```
+
+---
+
+## Invalid Payload
+
+Returns:
+
+```txt
+401 Unauthorized
+```
+
+---
+
+# JWT Payload Challenges
+
+Problem:
+
+```ts
+jwt.verify()
+```
+
+returns:
+
+```ts
+string | JwtPayload
+```
+
+This means:
+
+TypeScript cannot guarantee:
+
+```ts
+decoded.userId
+```
+
+exists.
+
+---
+
+# Solution
+
+Created:
+
+```ts
+interface CustomJwtPayload
+```
+
+Extended:
+
+```ts
+JwtPayload
+```
+
+Added:
+
+```ts
+userId
+```
+
+Performed runtime validation before usage.
+
+---
+
+# Important Learning
+
+The problem was not direct casting itself.
+
+The larger issue was:
+
+```ts
+token
+```
+
+and:
+
+```ts
+decoded.userId
+```
+
+both require runtime guarantees.
+
+Type safety alone cannot solve runtime uncertainty.
+
+---
+
+# Refresh Token Flow
+
+Implemented:
+
+```txt
+AuthService.refreshToken()
+```
+
+---
+
+# Refresh Process
+
+1. Verify refresh token
+
+2. Extract user ID
+
+3. Find user
+
+4. Generate new tokens
+
+5. Return tokens
+
+---
+
+# Refresh Controller
+
+Created:
+
+```txt
+POST /refresh
+```
+
+Flow:
+
+- read refresh cookie
+- validate token
+- generate new tokens
+- update refresh cookie
+- return new access token
+
+---
+
+# Protected User Profile Endpoint
+
+Implemented:
+
+```txt
+GET /me
+```
+
+Purpose:
+
+Return authenticated user information.
+
+---
+
+# Request User Context
+
+Because:
+
+```ts
+requireAuth
+```
+
+runs first,
+
+usage becomes:
+
+```ts
+req.user!.id
+```
+
+The non-null assertion is safe here.
+
+---
+
+# /me Response
+
+Returns:
+
+- id
+- email
+- firstName
+- lastName
+
+---
+
+# Protected Routes Added
+
+Added:
+
+```txt
+POST /refresh
+
+GET /me
+```
+
+---
+
+# Authentication System Status
+
+Current auth system supports:
+
+✓ Register
+
+✓ Login
+
+✓ Logout
+
+✓ Refresh Tokens
+
+✓ Protected Routes
+
+✓ User Context Injection
+
+✓ Profile Retrieval
+
+✓ Request Validation
+
+✓ Swagger Documentation
+
+✓ Typed Request Extensions
+
+---
+
+# Testing
+
+Tested:
+
+- refresh flow
+
+- protected routes
+
+- expired tokens
+
+- invalid tokens
+
+- missing tokens
+
+- authenticated user retrieval
+
+---
+
+# Architecture Achieved
+
+Current flow:
+
+```txt
+Request
+
+↓
+
+Validation Middleware
+
+↓
+
+Authentication Middleware
+
+↓
+
+Controller
+
+↓
+
+Service Layer
+
+↓
+
+Database
+
+↓
+
+Response
+```
+
+---
+
+# Learnings
+
+Today's work reinforced:
+
+- JWT authentication patterns
+
+- refresh token architecture
+
+- TypeScript runtime safety
+
+- middleware chaining
+
+- request augmentation
+
+- reusable API documentation
+
+- protected route design
+
+---
+
+# Current Project Status
+
+Phase 1 — Domain Modeling ✓
+
+Phase 2 — Backend Foundations ✓
+
+Phase 3 — Authentication System ✓
+
+Authentication module is now largely complete.
+
+---
+
+# Next Steps
+
+- Authorization layer
+
+- Accounts module
+
+- Beneficiary module
+
+- Transaction engine
+
+- Banking workflows

@@ -23,7 +23,15 @@ const options: swaggerJSDoc.Options = {
 
             responses,
 
-            schemas
+            schemas,
+
+            securitySchemes: {
+                bearerAuth: {
+                    type: 'http',
+                    scheme: 'bearer',
+                    bearerFormat: 'JWT'
+                }
+            }
             
         }
     },
