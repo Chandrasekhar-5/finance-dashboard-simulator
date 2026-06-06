@@ -248,4 +248,12 @@ router.post('/refresh', AuthController.refresh);
 router.get('/me', requireAuth, AuthController.getme);
 
 
+router.post('/logout-all', requireAuth, AuthController.logoutAllDevices);
+
+
+router.get('/sessions', requireAuth, AuthController.getSessions);
+
+
+router.delete('/sessions/:sessionId', requireAuth, AuthController.revokeSession);
+
 export default router;

@@ -1,8 +1,10 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { env } from '../../config/env.js';
+import { TokenStorage } from '../../utils/tokenStorage.js';
 
 
 interface RegisterInput {
@@ -15,6 +17,13 @@ interface RegisterInput {
 interface LoginInput {
     email: string;
     password: string;
+}
+
+interface DeviceInfo {
+    deviceId?: string;
+    deviceName?: string;
+    ipAddress?: string;
+    userAgent?: string;
 }
 
 export const AuthService = {
@@ -38,7 +47,7 @@ export const AuthService = {
         return this.generateToken(user.id);
     },
 
-    async login(data: LoginInput) {
+    async login(data: LoginInput, deviceInfo?: DeviceInfo) {
         const user = await prisma.user.findUnique({ where: { email: data.email } });
 
         if (!user) throw new AppError('Invalid email or password', 401);
@@ -46,27 +55,57 @@ export const AuthService = {
         const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
         if (!isPasswordValid) throw new AppError('Invalid credentials', 401);
 
-        return this.generateToken(user.id);
+        return this.generateToken(user.id, deviceInfo);
     },
 
-    async refreshToken(refreshToken: string) {
+    async refreshToken(refreshToken: string, deviceInfo?: DeviceInfo) {
         try {
 
             const decoded = jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET) as { userId: string };
+
+            const isValid = await TokenStorage.validateRefreshToken(decoded.userId, refreshToken);
+
+            if (!isValid) throw new AppError('Invalid or expired refresh token', 401);
+
+            await TokenStorage.deleteRefreshToken(decoded.userId, refreshToken);
 
             const user  = await prisma.user.findUnique({ where: { id: decoded.userId } });
 
             if (!user) throw new AppError('User not found', 404);
 
-            return this.generateToken(user.id);
+            return this.generateToken(user.id, deviceInfo);
         } catch (error) {
+            if (error instanceof jwt.TokenExpiredError || error instanceof AppError) {
+                throw error;
+            }
+
             throw new AppError('Invalid or expired refresh token', 401);
         }
     },
 
-    async generateToken(userId: string) {
+    async logout(refreshToken: string, userId: string) {
+        if (refreshToken) {
+            await TokenStorage.revokeSession(userId, refreshToken);
+        }
+    },
+
+    async logoutAllDevices(userId: string) {
+        await TokenStorage.deleteAllUserRefreshTokens(userId);
+    },
+
+    async getSessions(userId: string) {
+        return TokenStorage.getUserSessions(userId);
+    },
+
+    async revokeSession(sessionId: string, userId: string) {
+        await TokenStorage.revokeSession(sessionId, userId);
+    },
+
+    async generateToken(userId: string, deviceInfo?: DeviceInfo) {
         const accessToken = jwt.sign({ userId }, env.ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
         const refreshToken = jwt.sign({ userId }, env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+
+        await TokenStorage.storeRefreshToken(userId, refreshToken, deviceInfo);
 
         return { accessToken, refreshToken, userId };
     }

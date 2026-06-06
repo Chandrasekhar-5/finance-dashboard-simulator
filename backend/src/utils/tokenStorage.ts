@@ -9,7 +9,7 @@ export const TokenStorage = {
     },
 
     async storeRefreshToken(userId: string, refreshToken: string, deviceInfo?: {
-        deviceId: string;
+        deviceId?: string;
         deviceName?: string;
         ipAddress?: string;
         userAgent?: string;
