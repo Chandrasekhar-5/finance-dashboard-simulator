@@ -32,10 +32,10 @@ export const TokenStorage = {
             data: {
                 userId,
                 tokenHash,
-                deviceId: deviceInfo?.deviceId,
-                deviceName: deviceInfo?.deviceName,
-                ipAddress: deviceInfo?.ipAddress,
-                userAgent: deviceInfo?.userAgent,
+                deviceId: deviceInfo?.deviceId ?? null,
+                deviceName: deviceInfo?.deviceName ?? null,
+                ipAddress: deviceInfo?.ipAddress ?? null,
+                UserAgent: deviceInfo?.userAgent ?? null,
                 expiresAt
             }
         });
@@ -80,7 +80,7 @@ export const TokenStorage = {
                 deviceId: true,
                 deviceName: true,
                 ipAddress: true,
-                userAgent: true,
+                UserAgent: true,
                 createdAt: true,
                 expiresAt: true
             },

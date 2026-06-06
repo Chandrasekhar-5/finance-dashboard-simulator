@@ -19,8 +19,8 @@ const getDeviceInfo = (req: Request) => {
     return {
         deviceId: req.headers['x-device-id'] as string,
         deviceName: req.headers['x-device-name'] as string,
-        ipAddress: req.ip || req.socket.remoteAddress,
-        userAgent: req.headers['user-agent']
+        ipAddress: req.ip || req.socket.remoteAddress || '',
+        userAgent: req.headers['user-agent'] || ''
     };
 }
 
@@ -85,6 +85,8 @@ export const AuthController = {
     async revokeSession(req: Request, res: Response) {
     const userId = req.user!.id;
     const { sessionId } = req.params;
+
+    if (!sessionId || Array.isArray(sessionId)) throw new AppError("Invalid Session ID", 400);
     
     await AuthService.revokeSession(sessionId, userId);
     res.status(200).json({ success: true, message: 'Session revoked successfully' });
