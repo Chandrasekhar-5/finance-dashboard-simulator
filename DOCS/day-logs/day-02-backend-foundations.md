@@ -1821,3 +1821,503 @@ Authentication module is now largely complete.
 - Transaction engine
 
 - Banking workflows
+
+
+---
+
+# Refresh Token Persistence
+
+Authentication originally supported refresh tokens but did not persist them.
+
+To improve session security and allow proper token revocation, refresh token persistence was implemented.
+
+---
+
+# Database Changes
+
+Added:
+
+```txt
+RefreshToken Model
+```
+
+to:
+
+```txt
+schema.prisma
+```
+
+Purpose:
+
+- persist refresh tokens
+- enable logout
+- enable logout everywhere
+- support session management
+- allow token revocation
+
+---
+
+# Token Storage Layer
+
+Created:
+
+```txt
+src/utils/tokenStorage.ts
+```
+
+Purpose:
+
+Centralize refresh token storage logic.
+
+This prevents authentication services from directly manipulating token tables.
+
+---
+
+# Token Storage Responsibilities
+
+Implemented:
+
+## hashToken()
+
+Purpose:
+
+Hash refresh tokens before storage.
+
+Used:
+
+```ts
+crypto
+```
+
+Reason:
+
+Refresh tokens should never be stored directly.
+
+---
+
+## storeRefreshToken()
+
+Purpose:
+
+Persist refresh tokens.
+
+Responsibilities:
+
+- calculate expiry
+- remove previous token for same device
+- store hashed token
+- associate device metadata
+
+---
+
+## validateRefreshToken()
+
+Purpose:
+
+Verify whether a refresh token still exists.
+
+Process:
+
+```txt
+Token
+
+↓
+
+Hash
+
+↓
+
+Database Lookup
+
+↓
+
+Valid / Invalid
+```
+
+---
+
+## deleteRefreshToken()
+
+Purpose:
+
+Used during:
+
+- logout
+
+Deletes:
+
+single refresh token session.
+
+---
+
+## deleteAllUserRefreshTokens()
+
+Purpose:
+
+Used during:
+
+- logout everywhere
+- password changes
+- session invalidation
+
+Deletes:
+
+all user sessions.
+
+---
+
+## getUserSessions()
+
+Purpose:
+
+Retrieve active sessions.
+
+Supports future:
+
+- device management
+- account security views
+
+---
+
+## revokeSession()
+
+Purpose:
+
+Remove a specific session.
+
+Supports future:
+
+- session management UI
+
+---
+
+# Device Information Support
+
+Created:
+
+```ts
+DeviceInfo
+```
+
+interface.
+
+Purpose:
+
+Allow session identification.
+
+Examples:
+
+- browser
+- device
+- operating system
+
+---
+
+# Login Flow Changes
+
+Login now:
+
+1. Authenticate user
+
+2. Generate tokens
+
+3. Persist refresh token
+
+4. Store device information
+
+5. Return session
+
+---
+
+# Refresh Flow Changes
+
+Refresh token flow now performs:
+
+1. Validate refresh token exists
+
+2. Decode token
+
+3. Remove old token
+
+4. Generate new tokens
+
+5. Persist new refresh token
+
+6. Return updated session
+
+---
+
+# Token Rotation
+
+Refresh flow now rotates refresh tokens.
+
+Old refresh token:
+
+```txt
+INVALIDATED
+```
+
+New refresh token:
+
+```txt
+GENERATED
+```
+
+Benefits:
+
+- replay protection
+- reduced token theft impact
+- improved security
+
+---
+
+# Cookie Improvements
+
+Updated:
+
+```txt
+setRefreshCookie()
+```
+
+Added:
+
+```txt
+/api/v1/auth
+```
+
+path restriction.
+
+Purpose:
+
+Reduce unnecessary cookie exposure.
+
+---
+
+# Device Information Extraction
+
+Created:
+
+```txt
+getDeviceInfo()
+```
+
+Purpose:
+
+Capture session metadata.
+
+Used during:
+
+- login
+- session creation
+
+---
+
+# Logout Bug Investigation
+
+Problem:
+
+Logout cleared cookies.
+
+But:
+
+Refresh tokens remained inside database.
+
+---
+
+# Root Cause
+
+Problem was:
+
+```txt
+userId
+```
+
+was undefined.
+
+The flow depended on:
+
+```txt
+Controller
+
+↓
+
+Service
+
+↓
+
+Token Deletion
+```
+
+without guaranteed user information.
+
+---
+
+# Considered Solution 1
+
+Protect:
+
+```txt
+/logout
+```
+
+using:
+
+```txt
+requireAuth
+```
+
+Problem:
+
+If access token expired:
+
+```txt
+User clicks logout
+
+↓
+
+401 Unauthorized
+
+↓
+
+Cannot logout
+```
+
+Creates poor user experience.
+
+---
+
+# Final Solution
+
+Removed:
+
+```txt
+userId dependency
+```
+
+Instead:
+
+- decode refresh token
+- extract user ID internally
+- perform deletion directly
+
+Result:
+
+Logout now correctly removes database session.
+
+---
+
+# Logout-All Investigation
+
+Problem:
+
+Refresh tokens removed from database.
+
+But:
+
+Cookies remained on devices.
+
+---
+
+# Understanding
+
+The server:
+
+```txt
+Cannot access cookies
+stored on other devices
+```
+
+This is expected behavior.
+
+Removing database sessions is sufficient.
+
+---
+
+# Improvement Implemented
+
+Current device cookie is now cleared.
+
+Result:
+
+- current device logs out immediately
+- other devices lose session during refresh
+
+---
+
+# Authentication System Status
+
+Authentication now supports:
+
+✓ Register
+
+✓ Login
+
+✓ Logout
+
+✓ Logout Everywhere
+
+✓ Refresh Tokens
+
+✓ Refresh Token Rotation
+
+✓ Hashed Refresh Storage
+
+✓ Session Revocation
+
+✓ Device Sessions
+
+✓ Protected Routes
+
+✓ User Profile Retrieval
+
+---
+
+# Security Improvements Achieved
+
+Added:
+
+- hashed refresh tokens
+
+- token rotation
+
+- session invalidation
+
+- database-backed sessions
+
+- reduced cookie scope
+
+---
+
+# Learnings
+
+Today's work reinforced:
+
+- session architecture
+
+- refresh token security
+
+- token rotation
+
+- device session management
+
+- authentication UX tradeoffs
+
+- stateful session design
+
+---
+
+# Current Authentication Phase
+
+Authentication module is approaching production readiness.
+
+Remaining improvements are primarily:
+
+- email verification
+
+- password reset flows
+
+- OAuth
+
+- rate limiting
+
+- session dashboards

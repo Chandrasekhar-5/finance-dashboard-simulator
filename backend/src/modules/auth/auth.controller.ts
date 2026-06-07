@@ -3,6 +3,9 @@ import { AuthService } from './auth.service.js';
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
 import { prisma } from '../../lib/prisma.js';
+import jwt from 'jsonwebtoken';
+
+
 
 
 const setRefreshCookie = (res: Response, token: string) => {
@@ -43,14 +46,20 @@ export const AuthController = {
 
     async logout(req: Request, res: Response) {
         const refreshToken = req.cookies.refreshToken;
-        const userId = req.user?.id;
+        
+        await AuthService.logout(refreshToken);
+        res.clearCookie('refreshToken', {
+         path:'/api/v1/auth',
+         httpOnly:true,
+         secure: env.NODE_ENV === 'production',
+         sameSite:'strict'
+       }
+   );
 
-        if (refreshToken && userId) {
-            await AuthService.logout(refreshToken, userId);
-        }
-
-        res.clearCookie('refreshToken', { path: '/api/v1/auth' });
-        res.status(200).json({ success: true, message: 'Logged out successfully' });
+   res.status(200).json({
+      success:true,
+      message:'Logged out successfully'
+   });
     },
 
     async logoutAllDevices(req: Request, res: Response) {
@@ -59,6 +68,13 @@ export const AuthController = {
         if (!userId) throw new AppError('Unauthorized', 401);
 
         await AuthService.logoutAllDevices(userId);
+
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            secure: env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/api/v1/auth'
+        });
         res.status(200).json({ success: true, message: 'Logged out from all devices successfully' });
     },
 

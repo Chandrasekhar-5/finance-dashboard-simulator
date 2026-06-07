@@ -75,7 +75,7 @@ export const AuthService = {
 
             return this.generateToken(user.id, deviceInfo);
         } catch (error) {
-            if (error instanceof jwt.TokenExpiredError || error instanceof AppError) {
+            if (error instanceof AppError) {
                 throw error;
             }
 
@@ -83,9 +83,15 @@ export const AuthService = {
         }
     },
 
-    async logout(refreshToken: string, userId: string) {
-        if (refreshToken) {
-            await TokenStorage.revokeSession(userId, refreshToken);
+    async logout(refreshToken: string) {
+        if (!refreshToken) throw new AppError('Refresh token not found', 401);
+
+        try {
+            const decoded = jwt.verify(refreshToken, env.REFRESH_TOKEN_SECRET) as { userId: string };
+
+            await TokenStorage.deleteRefreshToken(decoded.userId, refreshToken);
+        } catch (error) {
+            throw new AppError('Invalid or expired refresh token', 401);
         }
     },
 
