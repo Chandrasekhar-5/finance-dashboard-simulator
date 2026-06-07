@@ -3,6 +3,7 @@ import { AuthController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
 import { registerSchema, loginSchema } from './auth.schema.js';
 import { requireAuth } from '../../middleware/requireAuth.js';
+import { registerLimiter, loginLimiter, refreshLimiter, forgotPasswordLimiter, changePasswordLimiter } from '../../middleware/rateLimiter.js';
 
 
 const router = Router();
@@ -76,7 +77,7 @@ const router = Router();
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/register', validate(registerSchema), AuthController.register);
+router.post('/register', registerLimiter, validate(registerSchema), AuthController.register);
 
 
 /**
@@ -135,7 +136,7 @@ router.post('/register', validate(registerSchema), AuthController.register);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/login', validate(loginSchema), AuthController.login);
+router.post('/login', loginLimiter, validate(loginSchema), AuthController.login);
 
 
 /**
@@ -204,7 +205,7 @@ router.post('/logout', AuthController.logout);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/refresh', AuthController.refresh);
+router.post('/refresh', refreshLimiter, AuthController.refresh);
 
 
 /**
