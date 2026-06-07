@@ -65,5 +65,62 @@ export const schemas = {
                 }
             }
         }
+    },
+
+    SessionsResponse: {
+
+        type: 'object',
+
+        properties: {
+            success: {
+                type: 'boolean',
+                example: true
+            },
+
+            data: {
+                type: 'array',
+
+                items: {
+                    type: 'object',
+
+                    properties: {
+                        id: {
+                            type: 'string',
+                            example: '64b8c9f1e4b0a2d3c4e5f678'
+                        },
+
+                        deviceId: {
+                            type: 'string',
+                            example: 'laptop-001'
+                        },
+
+                        deviceName: {
+                            type: 'string',
+                            example: 'Loq'
+                        },
+
+                        ipAddress: {
+                            type: 'string',
+                            example: '192.168.1.1'
+                        },
+
+                        userAgent: {
+                            type: 'string',
+                            example: 'yaak'
+                        },
+
+                        createdAt: {
+                            type: 'string',
+                            example: '2026-06-07T14:34:40.527Z'
+                        },
+
+                        expiresAt: {
+                            type: 'string',
+                            example: '2026-06-14T14:34:40.499Z'
+                        }
+                    }
+                }
+            },
+        }
     }
 }

@@ -248,12 +248,144 @@ router.post('/refresh', AuthController.refresh);
 router.get('/me', requireAuth, AuthController.getme);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/logout-all:
+ *   post:
+ *     summary: Logout all devices
+ *     tags:
+ *       - Authentication
+ * 
+ *     security:
+ *       - bearerAuth: []
+ * 
+ *     responses:
+ *       200:
+ *         description: Logged out from all devices successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ * 
+ *                 message:
+ *                   type: string
+ *                   example: Logged out from all devices successfully
+ * 
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ * 
+ *                 error:
+ *                   type: string
+ *                   example: Unauthorized
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.post('/logout-all', requireAuth, AuthController.logoutAllDevices);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/sessions:
+ *   get:
+ *     summary: Get user sessions
+ *     tags:
+ *       - Authentication
+ * 
+ *     security:
+ *       - bearerAuth: []
+ * 
+ *     responses:
+ *       200:
+ *         description: User sessions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SessionsResponse'
+ * 
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ * 
+ *                 error:
+ *                   type: string
+ *                   example: Unauthorized
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.get('/sessions', requireAuth, AuthController.getSessions);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/sessions/{sessionId}:
+ *   delete:
+ *     summary: Revoke a user session
+ *     tags:
+ *       - Authentication
+ * 
+ *     security:
+ *       - bearerAuth: []
+ * 
+ *     responses:
+ *       200:
+ *         description: Session revoked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ * 
+ *                 message:
+ *                   type: string
+ *                   example: Session revoked successfully
+ * 
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ * 
+ *                 error:
+ *                   type: string
+ *                   example: Unauthorized
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.delete('/sessions/:sessionId', requireAuth, AuthController.revokeSession);
 
 export default router;
