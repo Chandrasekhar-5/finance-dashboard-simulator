@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { AuthController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
-import { registerSchema, loginSchema } from './auth.schema.js';
+import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from './auth.schema.js';
 import { requireAuth } from '../../middleware/requireAuth.js';
 import { registerLimiter, loginLimiter, refreshLimiter, forgotPasswordLimiter, changePasswordLimiter } from '../../middleware/rateLimiter.js';
 
@@ -388,5 +388,14 @@ router.get('/sessions', requireAuth, AuthController.getSessions);
  *         $ref: '#/components/responses/InternalServerError'
  */
 router.delete('/sessions/:sessionId', requireAuth, AuthController.revokeSession);
+
+
+router.post('/forgot-password', forgotPasswordLimiter, validate(forgotPasswordSchema), AuthController.forgotPassword);
+
+
+router.post('/reset-password', validate(resetPasswordSchema), AuthController.resetPassword);
+
+
+router.post('/change-password', requireAuth, changePasswordLimiter, validate(changePasswordSchema), AuthController.changePassword);
 
 export default router;

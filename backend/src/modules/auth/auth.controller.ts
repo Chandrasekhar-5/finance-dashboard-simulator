@@ -106,7 +106,7 @@ export const AuthController = {
     
     await AuthService.revokeSession(sessionId, userId);
     res.status(200).json({ success: true, message: 'Session revoked successfully' });
-  },
+   },
 
     async getme(req: Request, res: Response) {
         const userId = req.user!.id;
@@ -117,5 +117,37 @@ export const AuthController = {
         });
 
         res.status(200).json({ success: true, data: user });
+    },
+
+    async forgotPassword(req: Request, res: Response) {
+        const { email } = req.body;
+        await AuthService.forgotPassword(email);
+
+        res.status(200).json({ success: true, message: 'If an account with that email exists, a password reset link has been sent' });
+    },
+
+    async resetPassword(req: Request, res: Response) {
+        const { token, newPassword } = req.body;
+
+        if (newPassword.length < 8) throw new AppError('Password must be at least 8 characters', 400);
+        
+        await AuthService.resetPassword(token, newPassword);
+
+        res.status(200).json({ success: true, message: 'Password reset successfully. Please login with your new password.' });
+    },
+
+    async changePassword(req: Request, res: Response) {
+        const userId = req.user!.id;
+
+        console.log(userId);
+        const { currentPassword, newPassword } = req.body;
+
+        if (newPassword.length < 8) throw new AppError('Password must be at least 8 characters', 400);
+
+        await AuthService.changePassword(userId, currentPassword, newPassword);
+
+        res.clearCookie('refreshToken', { path: '/api/v1/auth' });
+
+        res.status(200).json({ success: true, message: 'Password changed successfully. Please login again with your new password.' });
     }
 };

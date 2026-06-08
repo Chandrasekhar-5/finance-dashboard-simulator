@@ -17,7 +17,7 @@ export const PasswordResetService = {
         });
 
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 1);
+        expiresAt.setHours(expiresAt.getHours() + 1);
 
         await prisma.passwordReset.create({
             data: {
@@ -31,7 +31,7 @@ export const PasswordResetService = {
     },
 
     
-    async verifyResetToken(userId: string, token: string): Promise<string> {
+    async verifyResetToken(token: string): Promise<string> {
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         
         const resetRecord = await prisma.passwordReset.findFirst({

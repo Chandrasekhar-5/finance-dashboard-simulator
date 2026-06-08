@@ -5,6 +5,7 @@ import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { env } from '../../config/env.js';
 import { TokenStorage } from '../../utils/tokenStorage.js';
+import { PasswordResetService } from '../../utils/passwordReset.js';
 
 
 interface RegisterInput {
@@ -114,5 +115,53 @@ export const AuthService = {
         await TokenStorage.storeRefreshToken(userId, refreshToken, deviceInfo);
 
         return { accessToken, refreshToken, userId };
+    },
+
+    async forgotPassword(email: string) {
+        const user = await prisma.user.findUnique({ where: { email } });
+
+        if (!user) return;
+
+        const resetToken = await PasswordResetService.generateResetToken(user.id);
+
+        if (env.NODE_ENV === 'development') {
+            console.log(`Reset token for ${email}: ${resetToken}`);
+            return;
+        }
+    },
+
+
+    async resetPassword(token: string, newPassword: string) {
+        const userId = await PasswordResetService.verifyResetToken(token);
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+
+        await prisma.user.updateMany({
+            where: { id: userId },
+            data: { passwordHash }
+        });
+
+        await PasswordResetService.markTokenAsRead(token);
+
+        await TokenStorage.deleteAllUserRefreshTokens(userId);
+    },
+
+
+    async changePassword(userId: string, currentPassword: string, newPassword: string) {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+
+        if (!user) throw new AppError('User not found', 404);
+
+        const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!isPasswordValid) throw new AppError('Invalid credentials', 401);
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+
+        await prisma.user.updateMany({
+            where: { id:userId },
+            data: { passwordHash }
+        });
+
+        await TokenStorage.deleteAllUserRefreshTokens(userId);
     }
 };
