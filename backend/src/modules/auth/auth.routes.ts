@@ -390,12 +390,138 @@ router.get('/sessions', requireAuth, AuthController.getSessions);
 router.delete('/sessions/:sessionId', requireAuth, AuthController.revokeSession);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/forgot-password:
+ *   post:
+ *     summary: Forgot password
+ *     tags:
+ *       - Authentication
+ * 
+ *     requestBody:
+ *       required: true
+ * 
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ * 
+ *             required:
+ *               - email
+ * 
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: udayagiriamaresh13@gmail.com
+ * 
+ *     responses:
+ *       200:
+ *         description: Password reset instructions sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Response'
+ * 
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.post('/forgot-password', forgotPasswordLimiter, validate(forgotPasswordSchema), AuthController.forgotPassword);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/reset-password:
+ *   post:
+ *     summary: Reset password
+ *     tags:
+ *       - Authentication
+ * 
+ *     requestBody:
+ *       required: true
+ * 
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ * 
+ *             required:
+ *               - token
+ *               - password
+ * 
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: 64b8c9f1e4b0a2d3c4e5f678
+ * 
+ *               password:
+ *                 type: string
+ *                 example: Password123
+ * 
+ *     responses:
+ *       200:
+ *         description: Password reset successfully. Please login with your new password.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Response'
+ * 
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.post('/reset-password', validate(resetPasswordSchema), AuthController.resetPassword);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/change-password:
+ *   post:
+ *     summary: Change password
+ *     tags:
+ *       - Authentication
+ * 
+ *     security:
+ *       - bearerAuth: []
+ * 
+ *     requestBody:
+ *       required: true
+ * 
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ * 
+ *             required:
+ *               - password
+ * 
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *                 example: Password123
+ * 
+ *               newPassword:
+ *                 type: string
+ *                 example: Password@1234
+ * 
+ *     responses:
+ *       200:
+ *         description: Password changed successfully. Please login again with your new password.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Response'
+ * 
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.post('/change-password', requireAuth, changePasswordLimiter, validate(changePasswordSchema), AuthController.changePassword);
 
 export default router;

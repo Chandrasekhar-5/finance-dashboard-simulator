@@ -122,5 +122,22 @@ export const schemas = {
                 }
             },
         }
+    },
+
+    Response: {
+
+        type: 'object',
+
+        properties: {
+            success: {
+                type: 'boolean',
+                example: true
+            },
+
+            message: {
+                type: 'string',
+                example: 'Success'
+            }
+        }
     }
 }

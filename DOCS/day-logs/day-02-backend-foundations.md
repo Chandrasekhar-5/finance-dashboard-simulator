@@ -2321,3 +2321,595 @@ Remaining improvements are primarily:
 - rate limiting
 
 - session dashboards
+
+
+---
+
+# Rate Limiting Implementation
+
+Authentication functionality was expanded with request throttling and abuse protection.
+
+Installed:
+
+```bash
+npm install express-rate-limit
+
+npm install -D @types/express-rate-limit
+```
+
+---
+
+# Purpose of Rate Limiting
+
+Rate limiting restricts:
+
+- request frequency
+- brute force attempts
+- automated abuse
+- credential stuffing attacks
+
+Requests are limited based on:
+
+- IP address
+- email + IP
+- authenticated users
+
+depending on route requirements.
+
+---
+
+# Rate Limiting Strategy
+
+Different endpoints require different protection levels.
+
+Reason:
+
+Authentication endpoints have different attack surfaces.
+
+---
+
+# Shared Key Generator
+
+Created:
+
+```txt
+getKey()
+```
+
+Logic:
+
+## Login Requests
+
+Use:
+
+```txt
+email + IP
+```
+
+Purpose:
+
+Prevent attackers from:
+
+- brute forcing accounts
+- rotating IP addresses
+
+---
+
+## Other Requests
+
+Use:
+
+```txt
+IP Address
+```
+
+Purpose:
+
+Protect infrastructure.
+
+---
+
+# Register Limiter
+
+Configuration:
+
+```txt
+Window:
+
+1 hour
+
+Limit:
+
+10 requests
+```
+
+Applies:
+
+```txt
+Per IP
+```
+
+Purpose:
+
+Reduce account creation abuse.
+
+---
+
+# Login Limiter
+
+Configuration:
+
+```txt
+Window:
+
+15 minutes
+
+Limit:
+
+5 attempts
+```
+
+Applies:
+
+```txt
+Email + IP
+```
+
+Additional Behavior:
+
+```txt
+Successful logins
+do not count
+```
+
+Purpose:
+
+Reduce brute force attacks.
+
+---
+
+# Refresh Limiter
+
+Configuration:
+
+```txt
+Window:
+
+15 minutes
+
+Limit:
+
+30 refresh attempts
+```
+
+Purpose:
+
+Prevent refresh endpoint abuse.
+
+---
+
+# Forgot Password Limiter
+
+Configuration:
+
+```txt
+Window:
+
+1 hour
+
+Limit:
+
+3 requests
+```
+
+Purpose:
+
+Reduce reset abuse.
+
+---
+
+# Change Password Limiter
+
+Configuration:
+
+```txt
+Window:
+
+1 hour
+
+Limit:
+
+5 attempts
+```
+
+Purpose:
+
+Prevent repeated password attacks.
+
+---
+
+# Global API Limiter
+
+Configuration:
+
+```txt
+Window:
+
+1 minute
+
+Limit:
+
+100 requests
+```
+
+Applied globally.
+
+Purpose:
+
+Protect backend resources.
+
+---
+
+# Route Integration
+
+Applied rate limiting to:
+
+```txt
+/register
+
+/login
+
+/refresh
+```
+
+Added:
+
+```txt
+Global API Limiter
+```
+
+inside:
+
+```txt
+app.ts
+```
+
+---
+
+# Security Improvements Achieved
+
+Added:
+
+- brute force protection
+
+- credential stuffing mitigation
+
+- request throttling
+
+- infrastructure protection
+
+- endpoint-specific policies
+
+---
+
+# Password Reset Infrastructure
+
+Authentication system now includes password reset architecture.
+
+Purpose:
+
+Allow users to recover accounts securely.
+
+---
+
+# Database Changes
+
+Added:
+
+```txt
+PasswordReset Model
+```
+
+inside:
+
+```txt
+schema.prisma
+```
+
+---
+
+# Password Reset Model Purpose
+
+Stores:
+
+- token hashes
+
+- expiration timestamps
+
+- usage status
+
+- ownership
+
+Supports:
+
+- secure recovery flows
+
+- token invalidation
+
+- replay prevention
+
+---
+
+# Password Reset Model Design
+
+Includes:
+
+```txt
+id
+
+userId
+
+tokenHash
+
+expiresAt
+
+createdAt
+
+usedAt
+```
+
+Added indexes for:
+
+```txt
+userId
+
+expiresAt
+```
+
+Mapped table:
+
+```txt
+password_resets
+```
+
+---
+
+# Migration
+
+Database migrated to synchronize new model.
+
+---
+
+# Password Reset Service
+
+Created:
+
+```txt
+src/utils/passwordReset.ts
+```
+
+Purpose:
+
+Centralize reset token management.
+
+---
+
+# Reset Token Generation
+
+Implemented:
+
+```txt
+generateResetToken()
+```
+
+Responsibilities:
+
+1. Generate random token
+
+2. Hash token
+
+3. Remove existing unused tokens
+
+4. Create reset record
+
+5. Return plain token
+
+---
+
+# Why Return Plain Token
+
+Stored:
+
+```txt
+HASHED TOKEN
+```
+
+Returned:
+
+```txt
+PLAIN TOKEN
+```
+
+Reason:
+
+The token must be:
+
+- emailed to users
+
+while:
+
+- database remains protected
+
+---
+
+# Reset Token Expiration
+
+Tokens expire after:
+
+```txt
+1 Hour
+```
+
+Purpose:
+
+Reduce stolen token risk.
+
+---
+
+# Token Verification
+
+Implemented:
+
+```txt
+verifyResetToken()
+```
+
+Responsibilities:
+
+1. Hash provided token
+
+2. Find matching record
+
+3. Verify:
+
+- not expired
+
+- not used
+
+4. Return associated user
+
+---
+
+# Invalid Token Handling
+
+If:
+
+- expired
+
+- missing
+
+- already used
+
+returns:
+
+```txt
+Invalid Reset Token
+```
+
+---
+
+# Consuming Reset Tokens
+
+Implemented:
+
+```txt
+markTokenUsed()
+```
+
+Purpose:
+
+Prevent token reuse.
+
+Behavior:
+
+```txt
+usedAt = current time
+```
+
+This makes reset tokens:
+
+```txt
+Single Use
+```
+
+---
+
+# Security Improvements Achieved
+
+Added:
+
+- hashed reset tokens
+
+- token expiration
+
+- single-use reset links
+
+- replay prevention
+
+- reset invalidation
+
+---
+
+# Authentication Status
+
+Authentication currently supports:
+
+✓ Register
+
+✓ Login
+
+✓ Logout
+
+✓ Logout Everywhere
+
+✓ Refresh Rotation
+
+✓ Session Storage
+
+✓ Protected Routes
+
+✓ Rate Limiting
+
+✓ Password Reset Infrastructure
+
+✓ Device Sessions
+
+---
+
+# Learnings
+
+Today's work reinforced:
+
+- abuse prevention strategies
+
+- endpoint-specific rate limiting
+
+- recovery architecture
+
+- token lifecycle management
+
+- secure credential recovery
+
+- replay attack prevention
+
+---
+
+# Current Authentication Phase
+
+Authentication module is now transitioning from:
+
+```txt
+Feature Complete
+```
+
+towards:
+
+```txt
+Security Hardened
+```
+
+---
+
+# Remaining Major Auth Features
+
+- Email delivery
+
+- Password change flows
+
+- Email verification
+
+- OAuth
+
+- Account lockout strategy
+
+- Audit logging
