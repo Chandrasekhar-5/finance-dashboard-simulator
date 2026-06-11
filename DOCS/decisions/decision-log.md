@@ -60,3 +60,17 @@ The current focus is:
 before moving into route implementation.
 
 ---
+
+## Decision — Silent Forgot Password Responses
+
+### Choice
+
+The forgot password endpoint returns a success response even when the email does not exist.
+
+### Reason
+
+Prevents email enumeration attacks.
+
+### Security Benefit
+
+Attackers cannot determine whether an email address is registered in the system.
