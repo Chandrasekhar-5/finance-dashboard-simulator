@@ -2913,3 +2913,494 @@ Security Hardened
 - Account lockout strategy
 
 - Audit logging
+
+
+---
+
+# Password Management Implementation
+
+The password recovery infrastructure was connected to the authentication service and exposed through API endpoints.
+
+This completed:
+
+- forgot password
+- password reset
+- password change
+- session invalidation after credential updates
+
+---
+
+# Forgot Password Flow
+
+Implemented:
+
+```txt
+AuthService.forgotPassword()
+```
+
+Purpose:
+
+Allow users to request a password reset link.
+
+---
+
+# Forgot Password Process
+
+1. Look up user by email
+
+2. If user does not exist:
+
+```txt
+Return Success Silently
+```
+
+3. If user exists:
+
+- generate reset token
+- create reset record
+- send recovery link
+
+---
+
+# Silent Failure Strategy
+
+When email does not exist:
+
+```txt
+Do NOT return
+"User Not Found"
+```
+
+Instead:
+
+```txt
+Return Success
+```
+
+Reason:
+
+Prevent email enumeration attacks.
+
+Attackers should not be able to discover:
+
+- registered emails
+- account existence
+
+through API responses.
+
+---
+
+# Development Behavior
+
+During development:
+
+```txt
+Reset Token
+```
+
+is logged to console.
+
+---
+
+# Production Behavior
+
+During production:
+
+```txt
+Reset Token
+```
+
+will be delivered via email.
+
+---
+
+# Password Reset Flow
+
+Implemented:
+
+```txt
+AuthService.resetPassword()
+```
+
+Purpose:
+
+Allow users to create a new password using a valid reset token.
+
+---
+
+# Reset Password Process
+
+1. Verify reset token
+
+2. Extract associated user
+
+3. Hash new password
+
+4. Update password
+
+5. Mark token as used
+
+6. Invalidate all active sessions
+
+---
+
+# Token Consumption
+
+After successful password reset:
+
+```txt
+usedAt
+```
+
+is updated.
+
+Result:
+
+```txt
+Reset Link
+Can Only Be Used Once
+```
+
+---
+
+# Session Invalidation
+
+After password reset:
+
+```txt
+All Refresh Tokens
+Are Deleted
+```
+
+Purpose:
+
+Immediately revoke all active sessions.
+
+This prevents:
+
+- stolen devices remaining authenticated
+- compromised sessions surviving password changes
+
+---
+
+# Change Password Flow
+
+Implemented:
+
+```txt
+AuthService.changePassword()
+```
+
+Purpose:
+
+Allow authenticated users to update credentials.
+
+---
+
+# Change Password Process
+
+1. Find authenticated user
+
+2. Verify user exists
+
+3. Compare old password
+
+4. Validate credentials
+
+5. Hash new password
+
+6. Update password
+
+7. Invalidate all active sessions
+
+---
+
+# Password Verification
+
+Used:
+
+```ts
+bcrypt.compare()
+```
+
+to verify current password before allowing changes.
+
+---
+
+# Invalid Password Handling
+
+If current password does not match:
+
+```txt
+403 Forbidden
+```
+
+is returned.
+
+Password changes require proof of identity.
+
+---
+
+# Session Revocation Strategy
+
+Both:
+
+```txt
+Password Reset
+```
+
+and
+
+```txt
+Change Password
+```
+
+trigger:
+
+```txt
+deleteAllUserRefreshTokens()
+```
+
+This guarantees:
+
+```txt
+Credential Change
+
+↓
+
+Session Revocation
+
+↓
+
+Forced Re-Authentication
+```
+
+---
+
+# Controller Layer Updates
+
+Added controller methods:
+
+```txt
+forgotPassword()
+
+resetPassword()
+
+changePassword()
+```
+
+Responsibilities:
+
+- receive requests
+- invoke service methods
+- return standardized responses
+
+---
+
+# Validation Schemas
+
+Updated:
+
+```txt
+auth.schema.ts
+```
+
+Added:
+
+## Forgot Password Schema
+
+Validates:
+
+```txt
+email
+```
+
+---
+
+## Reset Password Schema
+
+Validates:
+
+```txt
+token
+
+newPassword
+```
+
+---
+
+## Change Password Schema
+
+Validates:
+
+```txt
+oldPassword
+
+newPassword
+```
+
+---
+
+# Route Registration
+
+Added endpoints:
+
+```txt
+POST /forgot-password
+
+POST /reset-password
+
+POST /change-password
+```
+
+---
+
+# Route Protection
+
+Change password requires:
+
+```txt
+Authenticated User
+```
+
+because the user is already logged in.
+
+Forgot password and reset password remain public.
+
+---
+
+# Authentication Architecture Now
+
+Current authentication flows include:
+
+```txt
+Register
+
+↓
+
+Login
+
+↓
+
+Refresh
+
+↓
+
+Logout
+
+↓
+
+Logout Everywhere
+
+↓
+
+Forgot Password
+
+↓
+
+Reset Password
+
+↓
+
+Change Password
+```
+
+---
+
+# Security Improvements Achieved
+
+Added:
+
+✓ Email Enumeration Protection
+
+✓ Single-Use Reset Tokens
+
+✓ Password Reset Expiration
+
+✓ Session Invalidation
+
+✓ Credential Rotation
+
+✓ Forced Re-Authentication
+
+---
+
+# Authentication Status
+
+Current module supports:
+
+✓ Register
+
+✓ Login
+
+✓ Logout
+
+✓ Logout Everywhere
+
+✓ Refresh Tokens
+
+✓ Refresh Rotation
+
+✓ Session Storage
+
+✓ Protected Routes
+
+✓ User Profiles
+
+✓ Rate Limiting
+
+✓ Forgot Password
+
+✓ Reset Password
+
+✓ Change Password
+
+✓ Session Invalidation
+
+---
+
+# Learnings
+
+Today's work reinforced:
+
+- secure account recovery
+
+- credential lifecycle management
+
+- session revocation patterns
+
+- email enumeration protection
+
+- authentication hardening
+
+- production security practices
+
+---
+
+# Current Phase Status
+
+Authentication module has progressed from:
+
+```txt
+Basic Authentication
+```
+
+to:
+
+```txt
+Production-Oriented Identity System
+```
+
+The remaining major features are primarily:
+
+- email delivery integration
+
+- email verification
+
+- OAuth providers
+
+- account lockout policies
+
+- audit logging
+
+- device/session dashboard
