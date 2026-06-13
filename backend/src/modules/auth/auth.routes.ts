@@ -1,12 +1,21 @@
 import { Router } from 'express';
 import { AuthController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
-import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from './auth.schema.js';
+import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, resendVerificationEmail } from './auth.schema.js';
 import { requireAuth } from '../../middleware/requireAuth.js';
 import { registerLimiter, loginLimiter, refreshLimiter, forgotPasswordLimiter, changePasswordLimiter } from '../../middleware/rateLimiter.js';
+import { requireEmailVerified } from '../../middleware/requireEmailVerification.js';
 
 
 const router = Router();
+
+router.post('/verify-email/resend', registerLimiter, validate(resendVerificationEmail), AuthController.resendVerification);
+
+
+router.get('/verify-email', AuthController.verifyEmail);
+
+
+router.post('/verify-email', validate(resendVerificationEmail), AuthController.verifyEmail);
 
 
 /**
@@ -246,7 +255,7 @@ router.post('/refresh', refreshLimiter, AuthController.refresh);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/me', requireAuth, AuthController.getme);
+router.get('/me', requireAuth, requireEmailVerified, AuthController.getme);
 
 
 /**
@@ -296,7 +305,7 @@ router.get('/me', requireAuth, AuthController.getme);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/logout-all', requireAuth, AuthController.logoutAllDevices);
+router.post('/logout-all', requireAuth, requireEmailVerified, AuthController.logoutAllDevices);
 
 
 /**
@@ -337,7 +346,7 @@ router.post('/logout-all', requireAuth, AuthController.logoutAllDevices);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/sessions', requireAuth, AuthController.getSessions);
+router.get('/sessions', requireAuth, requireEmailVerified, AuthController.getSessions);
 
 
 /**
@@ -387,7 +396,7 @@ router.get('/sessions', requireAuth, AuthController.getSessions);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.delete('/sessions/:sessionId', requireAuth, AuthController.revokeSession);
+router.delete('/sessions/:sessionId', requireAuth, requireEmailVerified, AuthController.revokeSession);
 
 
 /**
@@ -522,6 +531,6 @@ router.post('/reset-password', validate(resetPasswordSchema), AuthController.res
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/change-password', requireAuth, changePasswordLimiter, validate(changePasswordSchema), AuthController.changePassword);
+router.post('/change-password', requireAuth, requireEmailVerified, changePasswordLimiter, validate(changePasswordSchema), AuthController.changePassword);
 
 export default router;
