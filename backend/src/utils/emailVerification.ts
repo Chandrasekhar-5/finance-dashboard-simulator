@@ -65,13 +65,15 @@ export const EmailVerificationService = {
         if (!user) return;
 
         if (user.emailVerified) throw new AppError('Email already verified', 400);
-
+        
+        else {
         const token = await this.generateVerificationToken(user.id);
 
         if (env.NODE_ENV === 'development') {
             console.log(`Email verification token: ${email}: ${token}`);
-            console.log('Verification link: http://localhost:5000/api/v1/auth/verify-email?token=${token}');
+            console.log(`Verification link: http://localhost:5000/api/v1/auth/verify-email?token=${token}`);
         }
+    }
     },
 
     async isEmailVerified(userId: string): Promise<boolean> {

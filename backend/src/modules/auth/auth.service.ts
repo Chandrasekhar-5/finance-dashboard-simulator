@@ -52,7 +52,7 @@ export const AuthService = {
 
         if (env.NODE_ENV === 'development') {
             console.log(`Email verification token: ${user.email}: ${token}`);
-            console.log('Verification link: http://localhost:5000/api/v1/auth/verify-email?token=${token}');
+            console.log(`Verification link: http://localhost:5000/api/v1/auth/verify-email?token=${token}`);
         }
 
         return this.generateToken(user.id);

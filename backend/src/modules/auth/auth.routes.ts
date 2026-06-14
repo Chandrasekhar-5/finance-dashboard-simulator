@@ -9,9 +9,90 @@ import { requireEmailVerified } from '../../middleware/requireEmailVerification.
 
 const router = Router();
 
+/**
+ * @swagger
+ * /api/v1/auth/verify-email/resend:
+ *   post:
+ *     summary: Resend verification email
+ *     tags:
+ *       - Authentication
+ * 
+ *     requestBody:
+ *       required: true
+ * 
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ * 
+ *             required:
+ *               - email
+ * 
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: udayagiriamaresh13@gmail.com
+ * 
+ *     responses:
+ *       200:
+ *         description: Verification email sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ * 
+ *                 message:
+ *                   type: string
+ *                   example: If an account with that email exists and is not verified, a new verification link has been sent
+ * 
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.post('/verify-email/resend', registerLimiter, validate(resendVerificationEmail), AuthController.resendVerification);
 
 
+/**
+ * @swagger
+ * /api/v1/auth/verify-email:
+ *   get:
+ *     summary: Verify user's email
+ *     tags:
+ *       - Authentication
+ * 
+ *     security:
+ *       - bearerAuth: []
+ * 
+ *     responses:
+ *       200:
+ *         description: User's email verified successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ * 
+ *                 message:
+ *                   type: string
+ *                   example: Email verified successfully. You can now login.
+ * 
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
 router.get('/verify-email', AuthController.verifyEmail);
 
 
