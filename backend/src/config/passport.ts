@@ -3,6 +3,7 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { prisma } from '../lib//prisma.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
+import { EmailService } from '../services/email.service.js';
 
 
 passport.use(
@@ -95,7 +96,7 @@ passport.use(
                     },
                 });
 
-                // await EmailServie.sendWelcomeEmail(email, firstName);
+                await EmailService.sendWelcomeEmail(email, firstName);
 
                 return done(null, newUser);
             } catch (error) {
