@@ -5,7 +5,7 @@ import { env } from '../config/env.js';
 const resend = new Resend(env.RESEND_API_KEY);
 
 export const EmailService = {
-    async sendVeificationEmail(to: string, token: string) {
+    async sendVerificationEmail(to: string, token: string) {
         const verificationUrl = `${env.FRONTEND_URL}/verify-email?token=${token}`;
 
         try {

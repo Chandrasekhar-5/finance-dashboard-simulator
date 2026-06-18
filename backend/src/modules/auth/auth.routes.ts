@@ -5,9 +5,18 @@ import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema,
 import { requireAuth } from '../../middleware/requireAuth.js';
 import { registerLimiter, loginLimiter, refreshLimiter, forgotPasswordLimiter, changePasswordLimiter } from '../../middleware/rateLimiter.js';
 import { requireEmailVerified } from '../../middleware/requireEmailVerification.js';
-
+import { OAuthController } from './oauth.controller.js';
 
 const router = Router();
+
+
+router.get('/google', OAuthController.googleAuth);
+router.get('/google/callback', OAuthController.googleCallback);
+
+
+router.post('/oauth/link/:provider', requireAuth, OAuthController.linkGoogle);
+router.delete('/oauth/:provider', requireAuth, OAuthController.unlinkOAuth);
+
 
 /**
  * @swagger
