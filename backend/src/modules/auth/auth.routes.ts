@@ -1,12 +1,111 @@
 import { Router } from 'express';
 import { AuthController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
-import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema } from './auth.schema.js';
+import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, resendVerificationEmail } from './auth.schema.js';
 import { requireAuth } from '../../middleware/requireAuth.js';
 import { registerLimiter, loginLimiter, refreshLimiter, forgotPasswordLimiter, changePasswordLimiter } from '../../middleware/rateLimiter.js';
-
+import { requireEmailVerified } from '../../middleware/requireEmailVerification.js';
+import { OAuthController } from './oauth.controller.js';
 
 const router = Router();
+
+
+router.get('/google', OAuthController.googleAuth);
+router.get('/google/callback', OAuthController.googleCallback);
+
+
+router.post('/oauth/link/:provider', requireAuth, OAuthController.linkGoogle);
+router.delete('/oauth/:provider', requireAuth, OAuthController.unlinkOAuth);
+
+
+/**
+ * @swagger
+ * /api/v1/auth/verify-email/resend:
+ *   post:
+ *     summary: Resend verification email
+ *     tags:
+ *       - Authentication
+ * 
+ *     requestBody:
+ *       required: true
+ * 
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ * 
+ *             required:
+ *               - email
+ * 
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: udayagiriamaresh13@gmail.com
+ * 
+ *     responses:
+ *       200:
+ *         description: Verification email sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ * 
+ *                 message:
+ *                   type: string
+ *                   example: If an account with that email exists and is not verified, a new verification link has been sent
+ * 
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post('/verify-email/resend', registerLimiter, validate(resendVerificationEmail), AuthController.resendVerification);
+
+
+/**
+ * @swagger
+ * /api/v1/auth/verify-email:
+ *   get:
+ *     summary: Verify user's email
+ *     tags:
+ *       - Authentication
+ * 
+ *     security:
+ *       - bearerAuth: []
+ * 
+ *     responses:
+ *       200:
+ *         description: User's email verified successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ * 
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ * 
+ *                 message:
+ *                   type: string
+ *                   example: Email verified successfully. You can now login.
+ * 
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ * 
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get('/verify-email', AuthController.verifyEmail);
+
+
+router.post('/verify-email', validate(resendVerificationEmail), AuthController.verifyEmail);
 
 
 /**
@@ -246,7 +345,7 @@ router.post('/refresh', refreshLimiter, AuthController.refresh);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/me', requireAuth, AuthController.getme);
+router.get('/me', requireAuth, requireEmailVerified, AuthController.getme);
 
 
 /**
@@ -296,7 +395,7 @@ router.get('/me', requireAuth, AuthController.getme);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/logout-all', requireAuth, AuthController.logoutAllDevices);
+router.post('/logout-all', requireAuth, requireEmailVerified, AuthController.logoutAllDevices);
 
 
 /**
@@ -337,7 +436,7 @@ router.post('/logout-all', requireAuth, AuthController.logoutAllDevices);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/sessions', requireAuth, AuthController.getSessions);
+router.get('/sessions', requireAuth, requireEmailVerified, AuthController.getSessions);
 
 
 /**
@@ -387,7 +486,7 @@ router.get('/sessions', requireAuth, AuthController.getSessions);
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.delete('/sessions/:sessionId', requireAuth, AuthController.revokeSession);
+router.delete('/sessions/:sessionId', requireAuth, requireEmailVerified, AuthController.revokeSession);
 
 
 /**
@@ -522,6 +621,6 @@ router.post('/reset-password', validate(resetPasswordSchema), AuthController.res
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/change-password', requireAuth, changePasswordLimiter, validate(changePasswordSchema), AuthController.changePassword);
+router.post('/change-password', requireAuth, requireEmailVerified, changePasswordLimiter, validate(changePasswordSchema), AuthController.changePassword);
 
 export default router;

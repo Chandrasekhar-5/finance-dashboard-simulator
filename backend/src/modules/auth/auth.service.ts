@@ -6,6 +6,8 @@ import { AppError } from '../../utils/AppError.js';
 import { env } from '../../config/env.js';
 import { TokenStorage } from '../../utils/tokenStorage.js';
 import { PasswordResetService } from '../../utils/passwordReset.js';
+import { EmailVerificationService } from '../../utils/emailVerification.js';
+import { EmailService } from '../../services/email.service.js';
 
 
 interface RegisterInput {
@@ -42,9 +44,20 @@ export const AuthService = {
                 firstName: data.firstName,
                 lastName: data.lastName,
                 email: data.email,
-                passwordHash: passwordHash
+                passwordHash: passwordHash,
+                emailVerified: false
             }
         });
+
+        const token = await EmailVerificationService.generateVerificationToken(user.id);
+
+        if (env.NODE_ENV === 'development') {
+            console.log(`Email verification token: ${user.email}: ${token}`);
+            console.log(`Verification link: http://localhost:5000/api/v1/auth/verify-email?token=${token}`);
+        }
+
+        await EmailService.sendVerificationEmail(data.email, token);
+
         return this.generateToken(user.id);
     },
 
@@ -53,10 +66,22 @@ export const AuthService = {
 
         if (!user) throw new AppError('Invalid email or password', 401);
 
+        if (!user.emailVerified) throw new AppError('Please verify your email address before logging in', 403);
+
+        if (!user.passwordHash) throw new AppError('This account uses Google login. Please sign in with Google.',400);
+
         const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
         if (!isPasswordValid) throw new AppError('Invalid credentials', 401);
 
         return this.generateToken(user.id, deviceInfo);
+    },
+
+    async resendVerificationEmail(email: string): Promise<void> {
+        await EmailVerificationService.resendVerificationEmail(email);
+    },
+
+    async verifyEmail(token: string): Promise<void> {
+        await EmailVerificationService.verifyEmail(token);
     },
 
     async refreshToken(refreshToken: string, deviceInfo?: DeviceInfo) {
@@ -128,8 +153,9 @@ export const AuthService = {
             console.log(`Reset token for ${email}: ${resetToken}`);
             return;
         }
-    },
 
+        await EmailService.sendPasswordResetEmail(email, resetToken);
+    },
 
     async resetPassword(token: string, newPassword: string) {
         const userId = await PasswordResetService.verifyResetToken(token);
@@ -146,11 +172,12 @@ export const AuthService = {
         await TokenStorage.deleteAllUserRefreshTokens(userId);
     },
 
-
     async changePassword(userId: string, currentPassword: string, newPassword: string) {
         const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user) throw new AppError('User not found', 404);
+
+        if (!user.passwordHash) throw new AppError('This account uses Google login. Please sign in with Google.',400);
 
         const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
         if (!isPasswordValid) throw new AppError('Invalid credentials', 401);

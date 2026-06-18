@@ -10,7 +10,12 @@ const envSchema = z.object({
     DATABASE_URL: z.string(),
     ACCESS_TOKEN_SECRET: z.string(),
     REFRESH_TOKEN_SECRET: z.string(),
-    FRONTEND_URL: z.string().default('http://localhost:5173')
+    FRONTEND_URL: z.string().default('http://localhost:5173'),
+    RESEND_API_KEY: z.string(),
+    EMAIL_FROM: z.string().default('noreply@chandrasekhar.xyz'),
+    GOOGLE_CLIENT_ID: z.string(),
+    GOOGLE_CLIENT_SECRET: z.string(),
+    GOOGLE_CALLBACK_URL: z.string().default('http://localhost:5000/api/v1/auth/google/callback')
 });
 
 
