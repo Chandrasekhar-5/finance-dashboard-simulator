@@ -36,6 +36,34 @@ export const AuthController = {
         res.status(201).json({ success: true, data: { userId, accessToken } });
     },
 
+    async verifyEmail(req: Request, res: Response) {
+        const { token } = req.query;
+
+        if (!token || typeof token !== 'string') {
+            throw new AppError('Verification token is required', 400);
+        }
+
+        await AuthService.verifyEmail(token);
+
+        if (env.NODE_ENV === 'production') {
+            res.redirect(`${env.FRONTEND_URL}/login?verified=true`);
+        } else {
+            res.status(200).json({ success: true, message: 'Email verified successfully. You can now login.' });
+        }
+    },
+
+    async resendVerification(req: Request, res: Response) {
+        const { email } = req.body;
+
+        if (!email) {
+            throw new AppError('Email is required', 400);
+        }
+
+        await AuthService.resendVerificationEmail(email);
+
+        res.status(200).json({ success: true, message: 'If an account with that email exists and is not verified, a new verification link has been sent' });
+    },
+
     async login(req: Request, res: Response) {
         const deviceInfo = getDeviceInfo(req);
         const { accessToken, refreshToken, userId } = await AuthService.login(req.body, deviceInfo);

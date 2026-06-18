@@ -12,6 +12,11 @@ export const registerSchema = z.object({
     })
 });
 
+export const resendVerificationEmail = z.object({
+    body: z.object({
+        email: z.string().email('Invalid email format')
+    })
+});
 
 export const loginSchema = z.object({
     body: z.object({
