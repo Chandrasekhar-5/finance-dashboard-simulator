@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import cookieParser from 'cookie-parser';
 import authRoutes from './modules/auth/auth.routes.js';
+import accountRoutes from './modules/accounts/account.routes.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/swagger.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
@@ -30,6 +31,7 @@ app.use(passport.initialize());
 app.use('/api/v1', apiLimiter);
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/accounts', accountRoutes);
 
 app.get('/check', (req, res) => {
     res.status(200).json({ status: 'ok', timeStamp: new Date().toISOString() });
