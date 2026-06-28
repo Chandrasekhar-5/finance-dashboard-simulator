@@ -11,7 +11,6 @@ export const AccountController = {
 
     async getAccountDetails(req: Request, res: Response) {
         const { accountId } = req.params;
-        console.log(accountId);
 
         if(!accountId || Array.isArray(accountId)) throw new AppError('Account not found', 404);
 
