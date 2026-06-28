@@ -8,6 +8,7 @@ import { TokenStorage } from '../../utils/tokenStorage.js';
 import { PasswordResetService } from '../../utils/passwordReset.js';
 import { EmailVerificationService } from '../../utils/emailVerification.js';
 import { EmailService } from '../../services/email.service.js';
+import { generateAccountNumber } from '../../utils/generateAccountNumber.js';
 
 
 interface RegisterInput {
@@ -39,14 +40,29 @@ export const AuthService = {
 
         const passwordHash = await bcrypt.hash(data.password, 10);
 
-        const user = await prisma.user.create({
-            data: {
-                firstName: data.firstName,
-                lastName: data.lastName,
-                email: data.email,
-                passwordHash: passwordHash,
-                emailVerified: false
-            }
+        const user = await prisma.$transaction( async (tx) => {
+
+            const newUser = await tx.user.create({
+                data: {
+                    firstName: data.firstName,
+                    lastName: data.lastName,
+                    email: data.email,
+                    passwordHash: passwordHash,
+                    emailVerified: false
+                }
+            });
+
+            await tx.account.create({
+                data: {
+                    userId: newUser.id,
+                    accountNumber: generateAccountNumber(),
+                    type: 'CHECKING',
+                    status: 'ACTIVE',
+                    balance: 1000.00,
+                    currency: 'INR'
+                }
+            });
+        return newUser;
         });
 
         const token = await EmailVerificationService.generateVerificationToken(user.id);
