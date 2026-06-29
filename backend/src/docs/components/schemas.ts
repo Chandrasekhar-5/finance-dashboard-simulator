@@ -139,6 +139,103 @@ export const schemas = {
                 example: 'Success'
             }
         }
+    },
+    AccountsResponse: {
+
+        type: 'object',
+
+        properties: {
+            success: {
+                type: 'boolean',
+                example: true
+            },
+
+            data: {
+                type: 'array',
+
+                items: {
+                    type: 'object',
+
+                    properties: {
+                        id: {
+                            type: 'string',
+                            example: '64b8c9f1e4b0a2d3c4e5f678'
+                        },
+
+                        userId: {
+                            type: 'string',
+                            example: '64b8c9f1e4b0a2d3c4e5f678'
+                        },
+
+                        accountNumber: {
+                            type: 'string',
+                            example: '123456789'
+                        },
+
+                        type: {
+                            type: 'string',
+                            example: 'Savings'
+                        },
+
+                        status: {
+                            type: 'string',
+                            example: 'Active'
+                        },
+
+                        balance: {
+                            type: 'number',
+                            example: 1000
+                        },
+
+                        currency: {
+                            type: 'string',
+                            example: 'INR'
+                        },
+                    }
+                }
+            }
+        }
+    },
+
+    Account: {
+
+        type: 'object',
+
+        properties: {
+            id: {
+                type: 'string',
+                example: '64b8c9f1e4b0a2d3c4e5f678'
+            },
+
+            userId: {
+                type: 'string',
+                example: '64b8c9f1e4b0a2d3c4e5f678'
+            },
+
+            accountNumber: {
+                type: 'string',
+                example: '123456789'
+            },
+
+            type: {
+                type: 'string',
+                example: 'Savings'
+            },
+
+            status: {
+                type: 'string',
+                example: 'Active'
+            },
+
+            balance: {
+                type: 'number',
+                example: 1000
+            },
+
+            currency: {
+                type: 'string',
+                example: 'INR'
+            },
+        }
     }
-    
 }
