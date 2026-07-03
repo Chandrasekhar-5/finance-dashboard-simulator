@@ -9,3 +9,12 @@ export const transferSchema = z.object({
         reference: z.string().uuid('Must provide a unique idempotency key')
     })
 });
+
+
+export const getTransactionsSchema = z.object({
+    query: z.object({
+        accountId: z.string().uuid("Invalid accountId format"),
+        limit: z.string().optional().transform(val => (val ? parseInt(val) : 10)),
+        cursor: z.string().uuid("Invalid cursor format").optional()
+    })
+});

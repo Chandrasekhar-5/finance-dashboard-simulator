@@ -63,5 +63,55 @@ export const TransactionService = {
             }
             throw error;
         }
+    },
+
+    async getTransactionHistory(userId: string, accountId: string, limit: number, cursor?: string) {
+        const account = await prisma.account.findFirst({
+            where: { id: accountId, userId }
+        });
+
+        if (!account) throw new AppError('Account not found or unauthorized', 404);
+
+        const transaction = await prisma.transaction.findMany({
+            take: limit + 1,
+            skip: cursor ? 1 : 0,
+            cursor: cursor ? { id: cursor } : undefined,
+            where: {
+                OR: [
+                    { fromAccountId: accountId },
+                    { toAccountId: accountId }
+                ]
+            },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                fromAccount: { select: { user: { select: { firstName: true, lastName: true } } } },
+                toAccount: { select: { user: { select: { firstName: true, lastName: true } } } }
+            }
+        });
+
+        let nextCursor: string | undefined = undefined;
+        if (transaction.length > limit) {
+            const nextItem = transaction.pop();
+            nextCursor = nextItem!.id;
+        }
+
+        const mappedTransactions = transaction.map(t => {
+            const isMoneyOut = t.fromAccountId === accountId;
+            return {
+                id: t.id,
+                reference: t.reference,
+                amount: t.amount,
+                type: t.type,
+                direction: isMoneyOut ? 'OUT' : 'IN',
+                status: t.status,
+                description: t.description,
+                createdAt: t.createdAt,
+                counterparty: isMoneyOut
+                    ? `${t.toAccount?.user.firstName} ${t.toAccount?.user.lastName}`
+                    : `${t.fromAccount?.user.firstName} ${t.fromAccount?.user.lastName}`
+            }
+        });
+
+        return { data: mappedTransactions, nextCursor };
     }
 };
