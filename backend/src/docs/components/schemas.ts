@@ -237,5 +237,74 @@ export const schemas = {
                 example: 'INR'
             },
         }
+    },
+    Transaction: {
+
+        type: 'object',
+
+        properties: {
+
+            success: {
+                type: 'boolean',
+                example: true
+            },
+
+            message: {
+                type: 'string',
+                example: 'Funds transferred successfully'
+            },
+
+            data: {
+                
+                type: 'array',
+
+                items: {
+                    type: 'object',
+
+                    properties: {
+                        id: {
+                            type: 'string',
+                            example: '64b8c9f1e4b0a2d3c4e5f678'
+                        },
+
+                        reference: {
+                            type: 'string',
+                            example: '123456789'
+                        },
+
+                        
+                        amount: {
+                            type: 'number',
+                            example: 1000
+                        },
+
+                        type: {
+                            type: 'string',
+                            example: 'Transfer'
+                        },
+
+                        status: {
+                            type: 'string',
+                            example: 'Completed'
+                        },
+
+                        description: {
+                            type: 'string',
+                            example: 'Funds transferred successfully'
+                        },
+
+                        fromAccountId: {
+                            type: 'string',
+                            example: '64b8c9f1e4b0a2d3c4e5f678'
+                        },
+
+                        toAccountId: {
+                            type: 'string',
+                            example: '64b8c9f1e4b0a2d3c4e5f678'
+                        },
+                    }
+                }
+            }
+        }
     }
 }
