@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../../middleware/requireAuth.js';
 import { TransactionController } from './transaction.controller.js';
 import { validate } from '../../middleware/validate.js';
-import { transferSchema } from './transaction.schema.js';
+import { transferSchema, getTransactionsSchema } from './transaction.schema.js';
 
 const router = Router();
 
@@ -86,6 +86,9 @@ router.use(requireAuth);
  *               $ref: '#/components/schemas/InternalServerError'
  */
 router.post('/transfer', validate(transferSchema), TransactionController.transfer);
+
+
+router.get('/history', validate(getTransactionsSchema), TransactionController.getHistory);
 
 
 export default router;

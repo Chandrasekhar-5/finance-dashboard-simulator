@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
+import { Prisma } from '@prisma/client';
 
 interface Transaction {
     fromAccountId: string,
@@ -72,30 +73,54 @@ export const TransactionService = {
 
         if (!account) throw new AppError('Account not found or unauthorized', 404);
 
-        const transaction = await prisma.transaction.findMany({
+        const query = {
             take: limit + 1,
-            skip: cursor ? 1 : 0,
-            cursor: cursor ? { id: cursor } : undefined,
+            ...(cursor && {
+                cursor: { id: cursor },
+                skip: 1,
+            }),
             where: {
                 OR: [
                     { fromAccountId: accountId },
-                    { toAccountId: accountId }
-                ]
+                    { toAccountId: accountId },
+                ],
             },
-            orderBy: { createdAt: 'desc' },
+            orderBy: {
+                createdAt: 'desc',
+            },
             include: {
-                fromAccount: { select: { user: { select: { firstName: true, lastName: true } } } },
-                toAccount: { select: { user: { select: { firstName: true, lastName: true } } } }
-            }
-        });
+                fromAccount: {
+                    select: {
+                        user: {
+                            select: {
+                                firstName: true,
+                                lastName: true,
+                            },
+                        },
+                    },
+                },
+                toAccount: {
+                    select: {
+                        user: {
+                            select: {
+                                firstName: true,
+                                lastName: true,
+                            },
+                       },
+                    },
+                },
+            },
+        } satisfies Prisma.TransactionFindManyArgs;
+
+        const transactions = await prisma.transaction.findMany(query);
 
         let nextCursor: string | undefined = undefined;
-        if (transaction.length > limit) {
-            const nextItem = transaction.pop();
+        if (transactions.length > limit) {
+            const nextItem = transactions.pop();
             nextCursor = nextItem!.id;
         }
 
-        const mappedTransactions = transaction.map(t => {
+        const mappedTransactions = transactions.map(t => {
             const isMoneyOut = t.fromAccountId === accountId;
             return {
                 id: t.id,
