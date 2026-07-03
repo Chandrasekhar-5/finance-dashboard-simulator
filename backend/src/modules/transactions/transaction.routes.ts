@@ -88,6 +88,55 @@ router.use(requireAuth);
 router.post('/transfer', validate(transferSchema), TransactionController.transfer);
 
 
+/**
+ * @swagger
+ * /api/v1/transactions/history:
+ *   get:
+ *     summary: Get transaction history for an account
+ *     tags:
+ *       - Transactions
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Transaction history
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TransactionHistory'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: Unauthorized
+ *      404:
+ *         description: Account not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:    
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: Account not found
+ *      500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/InternalServerError'
+ */
 router.get('/history', validate(getTransactionsSchema), TransactionController.getHistory);
 
 
