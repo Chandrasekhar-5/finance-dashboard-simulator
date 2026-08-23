@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import cookieParser from 'cookie-parser';
 import authRoutes from './modules/auth/auth.routes.js';
 import accountRoutes from './modules/accounts/account.routes.js';
+import transactionRoutes from './modules/transactions/transaction.routes.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './docs/swagger.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
@@ -32,6 +33,7 @@ app.use('/api/v1', apiLimiter);
 
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/accounts', accountRoutes);
+app.use('/api/v1/transactions', transactionRoutes);
 
 app.get('/check', (req, res) => {
     res.status(200).json({ status: 'ok', timeStamp: new Date().toISOString() });
