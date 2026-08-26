@@ -2,19 +2,36 @@ import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { Prisma } from '@prisma/client';
 
-interface Transaction {
-    fromAccountId: string,
-    toAccountId: string,
-    amount: number,
-    description?: string,
-    reference: string
+interface TransferInput {
+    fromAccountId: string;
+    toAccountId: string;
+    amount: string | Prisma.Decimal;
+    description?: string;
+    reference: string;
+}
+
+interface DepositInput {
+    accountId: string;
+    amount: string | Prisma.Decimal;
+    description?: string;
+    reference: string;
+}
+
+interface WithdrawInput {
+    accountId: string;
+    amount: string | Prisma.Decimal;
+    description?: string;
+    reference: string;
 }
 
 export const TransactionService = {
-    async transferMoney(userId: string, data: Transaction) {
+    async transferMoney(userId: string, data: TransferInput) {
         const { fromAccountId, toAccountId, amount, description, reference } = data;
 
         if (fromAccountId === toAccountId) throw new AppError('Cannot transfer money to the same account', 400);
+
+        const decimalAmount = amount instanceof Prisma.Decimal ? amount : new Prisma.Decimal(amount);
+        if (decimalAmount.lte(0)) throw new AppError('Amount must be greater than 0', 400);
 
         const senderAccount = await prisma.account.findFirst({
             where: { id: fromAccountId, userId }
@@ -26,15 +43,15 @@ export const TransactionService = {
             const transactionRecord = await prisma.$transaction( async (tx) => {
 
                 const updatedSender = await tx.account.updateMany({
-                    where: { id: fromAccountId, balance: { gte: amount } },
-                    data: { balance: { decrement: amount } }
+                    where: { id: fromAccountId, balance: { gte: decimalAmount } },
+                    data: { balance: { decrement: decimalAmount } }
                 });
 
                 if (updatedSender.count === 0) throw new AppError('Insufficient funds', 400);
 
                 const updatedReceiver = await tx.account.updateMany({
                     where: { id: toAccountId },
-                    data: { balance: { increment: amount } }
+                    data: { balance: { increment: decimalAmount } }
                 });
 
                 if (updatedReceiver.count === 0) {
@@ -44,7 +61,7 @@ export const TransactionService = {
                 const record = await tx.transaction.create({
                     data: {
                         reference,
-                        amount,
+                        amount: decimalAmount,
                         type: 'TRANSFER',
                         status: 'COMPLETED',
                         description: description ?? null,
@@ -59,6 +76,96 @@ export const TransactionService = {
             return transactionRecord;
         } catch (error: any) {
 
+            if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
+                throw new AppError('Duplicate transaction request', 409);
+            }
+            throw error;
+        }
+    },
+
+    async depositMoney(userId: string, data: DepositInput) {
+        const { accountId, amount, description, reference } = data;
+
+        const decimalAmount = amount instanceof Prisma.Decimal ? amount : new Prisma.Decimal(amount);
+        if (decimalAmount.lte(0)) throw new AppError('Amount must be greater than 0', 400);
+
+        const account = await prisma.account.findFirst({
+            where: { id: accountId, userId }
+        });
+
+        if (!account) throw new AppError('Account not found or unauthorized', 404);
+
+        try {
+            const transactionRecord = await prisma.$transaction(async (tx) => {
+                const updatedAccount = await tx.account.updateMany({
+                    where: { id: accountId },
+                    data: { balance: { increment: decimalAmount } }
+                });
+
+                if (updatedAccount.count === 0) {
+                    throw new AppError('Account not found', 404);
+                }
+
+                const record = await tx.transaction.create({
+                    data: {
+                        reference,
+                        amount: decimalAmount,
+                        type: 'DEPOSIT',
+                        status: 'COMPLETED',
+                        description: description ?? null,
+                        toAccountId: accountId
+                    }
+                });
+
+                return record;
+            });
+
+            return transactionRecord;
+        } catch (error: any) {
+            if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
+                throw new AppError('Duplicate transaction request', 409);
+            }
+            throw error;
+        }
+    },
+
+    async withdrawMoney(userId: string, data: WithdrawInput) {
+        const { accountId, amount, description, reference } = data;
+
+        const decimalAmount = amount instanceof Prisma.Decimal ? amount : new Prisma.Decimal(amount);
+        if (decimalAmount.lte(0)) throw new AppError('Amount must be greater than 0', 400);
+
+        const account = await prisma.account.findFirst({
+            where: { id: accountId, userId }
+        });
+
+        if (!account) throw new AppError('Account not found or unauthorized', 404);
+
+        try {
+            const transactionRecord = await prisma.$transaction(async (tx) => {
+                const updatedAccount = await tx.account.updateMany({
+                    where: { id: accountId, balance: { gte: decimalAmount } },
+                    data: { balance: { decrement: decimalAmount } }
+                });
+
+                if (updatedAccount.count === 0) throw new AppError('Insufficient funds', 400);
+
+                const record = await tx.transaction.create({
+                    data: {
+                        reference,
+                        amount: decimalAmount,
+                        type: 'WITHDRAWAL',
+                        status: 'COMPLETED',
+                        description: description ?? null,
+                        fromAccountId: accountId
+                    }
+                });
+
+                return record;
+            });
+
+            return transactionRecord;
+        } catch (error: any) {
             if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
                 throw new AppError('Duplicate transaction request', 409);
             }

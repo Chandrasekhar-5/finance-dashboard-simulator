@@ -37,8 +37,8 @@ router.use(requireAuth);
  *                 type: string
  *                 example: '64b8c9f1e4b0a2d3c4e5f678'
  *               amount:
- *                 type: number
- *                 example: 1000
+ *                 type: string
+ *                 example: '1000.00'
  *               description:
  *                 type: string
  *                 example: 'Transfer funds'

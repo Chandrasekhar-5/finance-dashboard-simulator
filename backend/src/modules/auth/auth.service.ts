@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { env } from '../../config/env.js';
@@ -64,7 +65,7 @@ export const AuthService = {
                             accountNumber: generateAccountNumber(),
                             type: 'CHECKING',
                             status: 'ACTIVE',
-                            balance: 1000.00,
+                            balance: new Prisma.Decimal('1000.00'),
                             currency: 'INR'
                         }
                     });
