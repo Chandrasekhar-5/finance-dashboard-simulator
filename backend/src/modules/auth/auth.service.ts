@@ -52,17 +52,45 @@ export const AuthService = {
                 }
             });
 
-            await tx.account.create({
-                data: {
-                    userId: newUser.id,
-                    accountNumber: generateAccountNumber(),
-                    type: 'CHECKING',
-                    status: 'ACTIVE',
-                    balance: 1000.00,
-                    currency: 'INR'
+            let attempts = 0;
+            let accountCreated = false;
+
+            while (attempts < 3 && !accountCreated) {
+                try {
+                    attempts++;
+                    await tx.account.create({
+                        data: {
+                            userId: newUser.id,
+                            accountNumber: generateAccountNumber(),
+                            type: 'CHECKING',
+                            status: 'ACTIVE',
+                            balance: 1000.00,
+                            currency: 'INR'
+                        }
+                    });
+                    accountCreated = true;
+                } catch (error: any) {
+                    const isCollision =
+                        error.code === 'P2002' &&
+                        (Array.isArray(error.meta?.target)
+                            ? error.meta.target.includes('accountNumber')
+                            : error.meta?.target === 'accountNumber');
+
+                    if (isCollision) {
+                        if (attempts < 3) {
+                            continue;
+                        }
+                        break;
+                    }
+                    throw error;
                 }
-            });
-        return newUser;
+            }
+
+            if (!accountCreated) {
+                throw new AppError('Account creation failed, please try again', 500);
+            }
+
+            return newUser;
         });
 
         const token = await EmailVerificationService.generateVerificationToken(user.id);

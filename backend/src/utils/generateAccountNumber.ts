@@ -1,3 +1,7 @@
+import crypto from 'crypto';
+
 export const generateAccountNumber = (): string => {
-    return Math.floor(1000000000 + Math.random() * 9000000000).toString();
-}
+    const randomBigInt = BigInt('0x' + crypto.randomBytes(5).toString('hex'));
+    const num = 1000000000n + (randomBigInt % 9000000000n);
+    return num.toString();
+};
