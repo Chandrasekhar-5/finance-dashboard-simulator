@@ -58,4 +58,15 @@ vi.mock('../lib/prisma.js', () => ({
 beforeEach(() => {
     vi.clearAllMocks();
     prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
+    prismaMock.account.findUnique.mockResolvedValue({
+        id: 'acc-receiver',
+        userId: 'user-2',
+        accountNumber: '2222222222',
+        type: 'CHECKING',
+        status: 'ACTIVE',
+        balance: '1000.0000',
+        currency: 'INR',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    });
 });

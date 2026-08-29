@@ -48,6 +48,24 @@ export const TransactionService = {
 
         if (!senderAccount) throw new AppError('Sender account not found or unauthorized', 404);
 
+        if (senderAccount.status !== 'ACTIVE') {
+            throw new AppError(`Sender account is ${senderAccount.status.toLowerCase()}`, 400);
+        }
+
+        const receiverAccount = await prisma.account.findUnique({
+            where: { id: toAccountId }
+        });
+
+        if (!receiverAccount) throw new AppError('Receiver account not found', 404);
+
+        if (receiverAccount.status !== 'ACTIVE') {
+            throw new AppError(`Receiver account is ${receiverAccount.status.toLowerCase()}`, 400);
+        }
+
+        if (receiverAccount.currency !== senderAccount.currency) {
+            throw new AppError('Currency mismatch between accounts', 400);
+        }
+
         // Daily aggregate limit check (rolling 24 hours)
         const past24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const dailyAgg = await prisma.transaction.aggregate({
@@ -84,19 +102,25 @@ export const TransactionService = {
             const transactionRecord = await prisma.$transaction( async (tx) => {
 
                 const updatedSender = await tx.account.updateMany({
-                    where: { id: fromAccountId, balance: { gte: decimalAmount } },
+                    where: { id: fromAccountId, status: 'ACTIVE', balance: { gte: decimalAmount } },
                     data: { balance: { decrement: decimalAmount } }
                 });
 
-                if (updatedSender.count === 0) throw new AppError('Insufficient funds', 400);
+                if (updatedSender.count === 0) {
+                    const checkSender = await tx.account.findUnique({ where: { id: fromAccountId } });
+                    if (checkSender && checkSender.status !== 'ACTIVE') {
+                        throw new AppError(`Sender account is ${checkSender.status.toLowerCase()}`, 400);
+                    }
+                    throw new AppError('Insufficient funds', 400);
+                }
 
                 const updatedReceiver = await tx.account.updateMany({
-                    where: { id: toAccountId },
+                    where: { id: toAccountId, status: 'ACTIVE' },
                     data: { balance: { increment: decimalAmount } }
                 });
 
                 if (updatedReceiver.count === 0) {
-                    throw new AppError('Receiver account not found', 404);
+                    throw new AppError('Receiver account not found or not active', 404);
                 }
 
                 const record = await tx.transaction.create({

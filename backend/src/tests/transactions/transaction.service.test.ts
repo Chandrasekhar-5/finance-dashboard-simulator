@@ -418,6 +418,320 @@ describe('TransactionService.transferMoney - Transfer Limits', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Account Status & Receiver Validation (Phase 4)
+// ---------------------------------------------------------------------------
+
+describe('TransactionService.transferMoney - Receiver & Account Status Validation', () => {
+
+    it('rejects when receiver account does not exist', async () => {
+        const sender = makeSenderAccount();
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(null);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-nonexistent',
+                amount:        '100.00',
+                reference:     'ref-rec-notfound',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 404,
+            message: expect.stringContaining('Receiver account not found'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('succeeds when receiver belongs to another user and is ACTIVE', async () => {
+        const sender = makeSenderAccount({ userId: 'user-1' });
+        const receiver = makeReceiverAccount({ userId: 'user-2', status: 'ACTIVE' });
+        const record = makeTransactionRecord();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        const result = await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '100.00',
+            reference:     'ref-cross-user-ok',
+        });
+
+        expect(result).toEqual(record);
+    });
+
+    it('rejects transfer when receiver is INACTIVE', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount({ status: 'INACTIVE' as any });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-rec-inactive',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Receiver account is inactive'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when receiver is CLOSED', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount({ status: 'CLOSED' as any });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-rec-closed',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Receiver account is closed'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when receiver is BLOCKED', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount({ status: 'BLOCKED' as any });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-rec-blocked',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Receiver account is blocked'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when receiver is FROZEN', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount({ status: 'FROZEN' as any });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-rec-frozen',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Receiver account is frozen'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when receiver is SUSPENDED', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount({ status: 'SUSPENDED' as any });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-rec-suspended',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Receiver account is suspended'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when sender account is CLOSED', async () => {
+        const sender = makeSenderAccount({ status: 'CLOSED' as any });
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-sender-closed',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Sender account is closed'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when sender account is BLOCKED', async () => {
+        const sender = makeSenderAccount({ status: 'BLOCKED' as any });
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-sender-blocked',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Sender account is blocked'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when sender account is FROZEN', async () => {
+        const sender = makeSenderAccount({ status: 'FROZEN' as any });
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-sender-frozen',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Sender account is frozen'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when sender account is SUSPENDED', async () => {
+        const sender = makeSenderAccount({ status: 'SUSPENDED' as any });
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-sender-suspended',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Sender account is suspended'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when sender account is INACTIVE', async () => {
+        const sender = makeSenderAccount({ status: 'INACTIVE' as any });
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-sender-inactive',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Sender account is inactive'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects transfer when there is a currency mismatch between sender and receiver', async () => {
+        const sender = makeSenderAccount({ currency: 'INR' });
+        const receiver = makeReceiverAccount({ currency: 'USD' });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-curr-mismatch',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Currency mismatch'),
+        });
+
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('ensures insufficient-funds behavior remains intact', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany.mockResolvedValueOnce({ count: 0 });
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '99999.00',
+                reference:     'ref-insufficient-funds-intact',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Insufficient funds'),
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
 // TransactionService.depositMoney
 // ---------------------------------------------------------------------------
 
