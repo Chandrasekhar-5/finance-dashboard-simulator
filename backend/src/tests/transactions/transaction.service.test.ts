@@ -226,6 +226,198 @@ describe('TransactionService.transferMoney', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Transfer Limits (Phase 3)
+// ---------------------------------------------------------------------------
+
+describe('TransactionService.transferMoney - Transfer Limits', () => {
+
+    it('rejects transfer amount below minimum limit (0.01)', async () => {
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '0.005',
+                reference:     'ref-below-min',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('below minimum limit'),
+        });
+    });
+
+    it('accepts transfer amount exactly equal to minimum limit (0.01)', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('100.00') });
+        const record = makeTransactionRecord({ amount: new Prisma.Decimal('0.01') });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        const result = await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '0.01',
+            reference:     'ref-exact-min',
+        });
+
+        expect(result).toEqual(record);
+    });
+
+    it('accepts transfer amount exactly equal to maximum per-transaction limit (1,000,000)', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('2000000.00') });
+        const record = makeTransactionRecord({ amount: new Prisma.Decimal('1000000.00') });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        const result = await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '1000000.00',
+            reference:     'ref-exact-max',
+        });
+
+        expect(result).toEqual(record);
+    });
+
+    it('rejects transfer amount above maximum per-transaction limit (1,000,000.01)', async () => {
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '1000000.01',
+                reference:     'ref-above-max',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('exceeds maximum per-transaction limit'),
+        });
+    });
+
+    it('rejects transfer when daily aggregate limit (5,000,000) is exceeded', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('10000000.00') });
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.transaction.aggregate.mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('4500000.00') } });
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '600000.00',
+                reference:     'ref-daily-limit',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Daily transfer limit exceeded'),
+        });
+    });
+
+    it('rejects transfer when monthly aggregate limit (50,000,000) is exceeded', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('100000000.00') });
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.transaction.aggregate
+            .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('100000.00') } })
+            .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('49500000.00') } });
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '600000.00',
+                reference:     'ref-monthly-limit',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Monthly transfer limit exceeded'),
+        });
+    });
+
+    it('handles multiple transfers contributing to daily/monthly totals correctly', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('10000000.00') });
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.transaction.aggregate
+            .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('4000000.00') } })
+            .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('10000000.00') } });
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        const record = makeTransactionRecord({ amount: new Prisma.Decimal('1000000.00') });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        const result = await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '1000000.00',
+            reference:     'ref-multi-limit',
+        });
+
+        expect(result).toEqual(record);
+    });
+
+    it('maintains exact Decimal precision during limit checks', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('10000000.00') });
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+
+        prismaMock.transaction.aggregate
+            .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('4999999.99') } })
+            .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('4999999.99') } });
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        const record = makeTransactionRecord({ amount: new Prisma.Decimal('0.01') });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        const result = await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '0.01',
+            reference:     'ref-prec-limit',
+        });
+
+        expect(result).toEqual(record);
+    });
+
+    it('filters aggregate queries to only count COMPLETED TRANSFER transactions', async () => {
+        const sender = makeSenderAccount();
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        const record = makeTransactionRecord({ amount: new Prisma.Decimal('100.00') });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '100.00',
+            reference:     'ref-filter-check',
+        });
+
+        expect(prismaMock.transaction.aggregate).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            where: expect.objectContaining({
+                fromAccountId: 'acc-sender',
+                type: 'TRANSFER',
+                status: 'COMPLETED',
+            })
+        }));
+    });
+});
+
+// ---------------------------------------------------------------------------
 // TransactionService.depositMoney
 // ---------------------------------------------------------------------------
 
@@ -364,16 +556,16 @@ describe('transferSchema Zod Validation', () => {
         expect(result.body.amount).toBe('100.50');
     });
 
-    it('accepts boundary decimal values like 0.01 and 4 decimal places', async () => {
+    it('accepts boundary decimal values like 0.01 and 4 decimal places within limits', async () => {
         const validBody = {
             fromAccountId: '123e4567-e89b-12d3-a456-426614174000',
             toAccountId:   '123e4567-e89b-12d3-a456-426614174001',
-            amount:        '0.0001',
+            amount:        '0.0100',
             reference:     '123e4567-e89b-12d3-a456-426614174002',
         };
 
         const result = await transferSchema.parseAsync({ body: validBody });
-        expect(result.body.amount).toBe('0.0001');
+        expect(result.body.amount).toBe('0.0100');
     });
 
     it('rejects numbers passed as amount instead of decimal string', async () => {
@@ -387,8 +579,8 @@ describe('transferSchema Zod Validation', () => {
         await expect(transferSchema.parseAsync({ body: invalidBody })).rejects.toThrow();
     });
 
-    it('rejects invalid decimal strings, negative values, zero, and more than 4 decimal places', async () => {
-        const testCases = ['abc', '-50.00', '0.00', '100.12345', '100.0.0'];
+    it('rejects invalid decimal strings, negative values, zero, amounts below min (0.01), amounts above max (1,000,000), and more than 4 decimal places', async () => {
+        const testCases = ['abc', '-50.00', '0.00', '0.005', '1000000.01', '100.12345', '100.0.0'];
 
         for (const badAmount of testCases) {
             const invalidBody = {

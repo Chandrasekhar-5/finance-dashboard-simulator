@@ -57,4 +57,5 @@ vi.mock('../lib/prisma.js', () => ({
 // Reset all mock state before each test so cases are fully isolated.
 beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.transaction.aggregate.mockResolvedValue({ _sum: { amount: null } });
 });

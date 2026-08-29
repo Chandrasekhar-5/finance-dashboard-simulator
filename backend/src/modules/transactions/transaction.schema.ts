@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
+import { getTransferLimits } from '../../config/transferLimits.js';
 
 export const transferSchema = z.object({
     body: z.object({
@@ -10,11 +11,21 @@ export const transferSchema = z.object({
             .refine((val) => {
                 try {
                     const d = new Prisma.Decimal(val);
-                    return d.gt(new Prisma.Decimal('0'));
+                    const limits = getTransferLimits();
+                    return d.gte(limits.minAmount);
                 } catch {
                     return false;
                 }
-            }, 'Amount must be greater than 0'),
+            }, 'Transfer amount is below minimum limit')
+            .refine((val) => {
+                try {
+                    const d = new Prisma.Decimal(val);
+                    const limits = getTransferLimits();
+                    return d.lte(limits.maxAmount);
+                } catch {
+                    return false;
+                }
+            }, 'Transfer amount exceeds maximum per-transaction limit'),
         description: z.string().max(255).optional(),
         reference: z.string().uuid('Must provide a unique idempotency key')
     })

@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { Prisma } from '@prisma/client';
+import { getTransferLimits } from '../../config/transferLimits.js';
 
 interface TransferInput {
     fromAccountId: string;
@@ -31,13 +32,53 @@ export const TransactionService = {
         if (fromAccountId === toAccountId) throw new AppError('Cannot transfer money to the same account', 400);
 
         const decimalAmount = amount instanceof Prisma.Decimal ? amount : new Prisma.Decimal(amount);
-        if (decimalAmount.lte(0)) throw new AppError('Amount must be greater than 0', 400);
+        const limits = getTransferLimits();
+
+        if (decimalAmount.lt(limits.minAmount)) {
+            throw new AppError('Transfer amount is below minimum limit', 400);
+        }
+
+        if (decimalAmount.gt(limits.maxAmount)) {
+            throw new AppError('Transfer amount exceeds maximum per-transaction limit', 400);
+        }
 
         const senderAccount = await prisma.account.findFirst({
             where: { id: fromAccountId, userId }
         });
 
         if (!senderAccount) throw new AppError('Sender account not found or unauthorized', 404);
+
+        // Daily aggregate limit check (rolling 24 hours)
+        const past24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const dailyAgg = await prisma.transaction.aggregate({
+            where: {
+                fromAccountId,
+                type: 'TRANSFER',
+                status: 'COMPLETED',
+                createdAt: { gte: past24h }
+            },
+            _sum: { amount: true }
+        });
+        const dailyUsed = dailyAgg._sum.amount ?? new Prisma.Decimal(0);
+        if (dailyUsed.plus(decimalAmount).gt(limits.dailyLimit)) {
+            throw new AppError('Daily transfer limit exceeded', 400);
+        }
+
+        // Monthly aggregate limit check (rolling 30 days)
+        const past30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const monthlyAgg = await prisma.transaction.aggregate({
+            where: {
+                fromAccountId,
+                type: 'TRANSFER',
+                status: 'COMPLETED',
+                createdAt: { gte: past30d }
+            },
+            _sum: { amount: true }
+        });
+        const monthlyUsed = monthlyAgg._sum.amount ?? new Prisma.Decimal(0);
+        if (monthlyUsed.plus(decimalAmount).gt(limits.monthlyLimit)) {
+            throw new AppError('Monthly transfer limit exceeded', 400);
+        }
 
         try {
             const transactionRecord = await prisma.$transaction( async (tx) => {
