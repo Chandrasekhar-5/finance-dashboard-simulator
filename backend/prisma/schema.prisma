@@ -23,6 +23,7 @@ model User {
   passwordResets     PasswordReset[]
   emailVerifications EmailVerification[]
   oauthAccounts      OAuthAccount[]
+  auditLogs          AuditLog[]
 
   @@map("users")
 }
@@ -171,4 +172,32 @@ enum TransactionStatus {
   COMPLETED
   FAILED
   REVERSED
+}
+
+enum AuditAction {
+  LOGIN
+  PASSWORD_CHANGED
+  TRANSFER
+  ACCOUNT_CREATED
+  SESSION_REVOKED
+  EMAIL_VERIFIED
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  action    AuditAction
+  resource  String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

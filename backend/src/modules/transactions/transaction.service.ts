@@ -2,6 +2,7 @@ import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
 import { Prisma } from '@prisma/client';
 import { getTransferLimits } from '../../config/transferLimits.js';
+import { AuditLogger } from '../../utils/auditLogger.js';
 
 interface TransferInput {
     fromAccountId: string;
@@ -25,8 +26,13 @@ interface WithdrawInput {
     reference: string;
 }
 
+interface RequestContext {
+    ipAddress?: string | null;
+    userAgent?: string | null;
+}
+
 export const TransactionService = {
-    async transferMoney(userId: string, data: TransferInput) {
+    async transferMoney(userId: string, data: TransferInput, requestContext?: RequestContext) {
         const { fromAccountId, toAccountId, amount, description, reference } = data;
 
         if (fromAccountId === toAccountId) throw new AppError('Cannot transfer money to the same account', 400);
@@ -136,6 +142,23 @@ export const TransactionService = {
                 });
 
                 return record;
+            });
+
+            await AuditLogger.log({
+                userId,
+                action: 'TRANSFER',
+                resource: 'TRANSACTION',
+                ipAddress: requestContext?.ipAddress,
+                userAgent: requestContext?.userAgent,
+                metadata: {
+                    transactionId: transactionRecord.id,
+                    reference: transactionRecord.reference,
+                    fromAccountId,
+                    toAccountId,
+                    amount: decimalAmount.toString(),
+                    type: 'TRANSFER',
+                    status: 'COMPLETED',
+                },
             });
 
             return transactionRecord;

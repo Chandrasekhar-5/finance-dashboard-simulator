@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from './AppError.js';
 import { env } from '../config/env.js';
+import { AuditLogger } from './auditLogger.js';
 
 
 export const EmailVerificationService = {
@@ -31,7 +32,7 @@ export const EmailVerificationService = {
         return token;
     },
 
-    async verifyEmail(token: string): Promise<void> {
+    async verifyEmail(token: string, context?: { ipAddress?: string | null; userAgent?: string | null }): Promise<void> {
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
         const verifiedRecord = await prisma.emailVerification.findFirst({
@@ -56,6 +57,17 @@ export const EmailVerificationService = {
         await prisma.emailVerification.update({
             where: { id: verifiedRecord.id },
             data: { usedAt: new Date() }
+        });
+
+        await AuditLogger.log({
+            userId: verifiedRecord.userId,
+            action: 'EMAIL_VERIFIED',
+            resource: 'AUTH',
+            ipAddress: context?.ipAddress,
+            userAgent: context?.userAgent,
+            metadata: {
+                email: verifiedRecord.user.email,
+            },
         });
     },
 

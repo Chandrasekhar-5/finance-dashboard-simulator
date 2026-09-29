@@ -10,6 +10,7 @@ import { PasswordResetService } from '../../utils/passwordReset.js';
 import { EmailVerificationService } from '../../utils/emailVerification.js';
 import { EmailService } from '../../services/email.service.js';
 import { generateAccountNumber } from '../../utils/generateAccountNumber.js';
+import { AuditLogger } from '../../utils/auditLogger.js';
 
 
 interface RegisterInput {
@@ -31,8 +32,13 @@ interface DeviceInfo {
     userAgent?: string;
 }
 
+interface RequestContext {
+    ipAddress?: string | null;
+    userAgent?: string | null;
+}
+
 export const AuthService = {
-    async register(data: RegisterInput) {
+    async register(data: RegisterInput, requestContext?: RequestContext) {
         const existingUser = await prisma.user.findUnique({ where: { email: data.email } });
 
         if (existingUser) {
@@ -94,6 +100,17 @@ export const AuthService = {
             return newUser;
         });
 
+        await AuditLogger.log({
+            userId: user.id,
+            action: 'ACCOUNT_CREATED',
+            resource: 'ACCOUNT',
+            ipAddress: requestContext?.ipAddress,
+            userAgent: requestContext?.userAgent,
+            metadata: {
+                email: user.email,
+            },
+        });
+
         const token = await EmailVerificationService.generateVerificationToken(user.id);
 
         if (env.NODE_ENV === 'development') {
@@ -106,7 +123,7 @@ export const AuthService = {
         return this.generateToken(user.id);
     },
 
-    async login(data: LoginInput, deviceInfo?: DeviceInfo) {
+    async login(data: LoginInput, deviceInfo?: DeviceInfo, requestContext?: RequestContext) {
         const user = await prisma.user.findUnique({ where: { email: data.email } });
 
         if (!user) throw new AppError('Invalid email or password', 401);
@@ -118,6 +135,17 @@ export const AuthService = {
         const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
         if (!isPasswordValid) throw new AppError('Invalid credentials', 401);
 
+        await AuditLogger.log({
+            userId: user.id,
+            action: 'LOGIN',
+            resource: 'AUTH',
+            ipAddress: requestContext?.ipAddress ?? deviceInfo?.ipAddress,
+            userAgent: requestContext?.userAgent ?? deviceInfo?.userAgent,
+            metadata: {
+                email: user.email,
+            },
+        });
+
         return this.generateToken(user.id, deviceInfo);
     },
 
@@ -125,8 +153,8 @@ export const AuthService = {
         await EmailVerificationService.resendVerificationEmail(email);
     },
 
-    async verifyEmail(token: string): Promise<void> {
-        await EmailVerificationService.verifyEmail(token);
+    async verifyEmail(token: string, context?: RequestContext): Promise<void> {
+        await EmailVerificationService.verifyEmail(token, context);
     },
 
     async refreshToken(refreshToken: string, deviceInfo?: DeviceInfo) {
@@ -166,16 +194,39 @@ export const AuthService = {
         }
     },
 
-    async logoutAllDevices(userId: string) {
+    async logoutAllDevices(userId: string, context?: RequestContext) {
         await TokenStorage.deleteAllUserRefreshTokens(userId);
+
+        await AuditLogger.log({
+            userId,
+            action: 'SESSION_REVOKED',
+            resource: 'SESSION',
+            ipAddress: context?.ipAddress,
+            userAgent: context?.userAgent,
+            metadata: {
+                scope: 'ALL',
+            },
+        });
     },
 
     async getSessions(userId: string) {
         return TokenStorage.getUserSessions(userId);
     },
 
-    async revokeSession(sessionId: string, userId: string) {
+    async revokeSession(sessionId: string, userId: string, context?: RequestContext) {
         await TokenStorage.revokeSession(sessionId, userId);
+
+        await AuditLogger.log({
+            userId,
+            action: 'SESSION_REVOKED',
+            resource: 'SESSION',
+            ipAddress: context?.ipAddress,
+            userAgent: context?.userAgent,
+            metadata: {
+                sessionId,
+                scope: 'SINGLE',
+            },
+        });
     },
 
     async generateToken(userId: string, deviceInfo?: DeviceInfo) {
@@ -202,7 +253,7 @@ export const AuthService = {
         await EmailService.sendPasswordResetEmail(email, resetToken);
     },
 
-    async resetPassword(token: string, newPassword: string) {
+    async resetPassword(token: string, newPassword: string, context?: RequestContext) {
         const userId = await PasswordResetService.verifyResetToken(token);
 
         const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -215,9 +266,20 @@ export const AuthService = {
         await PasswordResetService.markTokenAsRead(token);
 
         await TokenStorage.deleteAllUserRefreshTokens(userId);
+
+        await AuditLogger.log({
+            userId,
+            action: 'PASSWORD_CHANGED',
+            resource: 'AUTH',
+            ipAddress: context?.ipAddress,
+            userAgent: context?.userAgent,
+            metadata: {
+                method: 'RESET',
+            },
+        });
     },
 
-    async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    async changePassword(userId: string, currentPassword: string, newPassword: string, context?: RequestContext) {
         const user = await prisma.user.findUnique({ where: { id: userId } });
 
         if (!user) throw new AppError('User not found', 404);
@@ -235,5 +297,16 @@ export const AuthService = {
         });
 
         await TokenStorage.deleteAllUserRefreshTokens(userId);
+
+        await AuditLogger.log({
+            userId,
+            action: 'PASSWORD_CHANGED',
+            resource: 'AUTH',
+            ipAddress: context?.ipAddress,
+            userAgent: context?.userAgent,
+            metadata: {
+                method: 'CHANGE',
+            },
+        });
     }
 };

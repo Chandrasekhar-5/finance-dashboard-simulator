@@ -37,6 +37,7 @@ export const prismaMock = {
         findUnique: vi.fn(),
         findFirst:  vi.fn(),
         create:     vi.fn(),
+        update:     vi.fn(),
         updateMany: vi.fn(),
     },
     refreshToken: {
@@ -44,6 +45,22 @@ export const prismaMock = {
         findMany:   vi.fn(),
         create:     vi.fn(),
         deleteMany: vi.fn(),
+    },
+    emailVerification: {
+        findFirst:  vi.fn(),
+        create:     vi.fn(),
+        update:     vi.fn(),
+        deleteMany: vi.fn(),
+    },
+    passwordReset: {
+        findFirst:  vi.fn(),
+        create:     vi.fn(),
+        updateMany: vi.fn(),
+        deleteMany: vi.fn(),
+    },
+    auditLog: {
+        create:     vi.fn(),
+        findMany:   vi.fn(),
     },
     $transaction: vi.fn(),
 };
