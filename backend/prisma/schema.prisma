@@ -67,18 +67,22 @@ model Account {
 }
 
 model Transaction {
-  id            String            @id @default(uuid())
-  reference     String            @unique
-  amount        Decimal           @db.Decimal(19, 4)
-  type          TransactionType
-  status        TransactionStatus @default(PENDING)
-  description   String?
-  fromAccountId String?
-  toAccountId   String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  fromAccount   Account?          @relation("FromAccount", fields: [fromAccountId], references: [id])
-  toAccount     Account?          @relation("ToAccount", fields: [toAccountId], references: [id])
+  id                    String            @id @default(uuid())
+  reference             String            @unique
+  amount                Decimal           @db.Decimal(19, 4)
+  type                  TransactionType
+  status                TransactionStatus @default(PENDING)
+  description           String?
+  fromAccountId         String?
+  toAccountId           String?
+  senderBalanceBefore   Decimal?          @db.Decimal(19, 4)
+  senderBalanceAfter    Decimal?          @db.Decimal(19, 4)
+  receiverBalanceBefore Decimal?          @db.Decimal(19, 4)
+  receiverBalanceAfter  Decimal?          @db.Decimal(19, 4)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  fromAccount           Account?          @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccount             Account?          @relation("ToAccount", fields: [toAccountId], references: [id])
 
   @@index([fromAccountId])
   @@index([toAccountId])

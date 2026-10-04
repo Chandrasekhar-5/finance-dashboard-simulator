@@ -960,3 +960,267 @@ describe('TransactionService.getTransactionHistory', () => {
         expect(result.nextCursor).toBe('txn-10');
     });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 6 — Before/After Balances & Transaction Status
+// ---------------------------------------------------------------------------
+
+describe('Phase 6 — Before/After Balances & Transaction Status', () => {
+    it('captures accurate transfer sender before/after balances using Decimal arithmetic', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('5000.0000') });
+        const receiver = makeReceiverAccount({ balance: new Prisma.Decimal('1000.0000') });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        // Pre-tx findUnique for receiver check
+        prismaMock.account.findUnique
+            // 1st: pre-tx receiver validation
+            .mockResolvedValueOnce(receiver)
+            // 2nd: in-tx sender balance read (after decrement)
+            .mockResolvedValueOnce({ ...sender, balance: new Prisma.Decimal('3499.5000') })
+            // 3rd: in-tx receiver balance read (after increment)
+            .mockResolvedValueOnce({ ...receiver, balance: new Prisma.Decimal('2500.5000') });
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(makeTransactionRecord());
+
+        await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '1500.5000',
+            reference:     'ref-bal-sender',
+        });
+
+        expect(prismaMock.transaction.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    type: 'TRANSFER',
+                    status: 'COMPLETED',
+                    amount: new Prisma.Decimal('1500.5000'),
+                    senderBalanceBefore: new Prisma.Decimal('5000.0000'),
+                    senderBalanceAfter:  new Prisma.Decimal('3499.5000'),
+                })
+            })
+        );
+    });
+
+    it('captures accurate transfer receiver before/after balances using Decimal arithmetic', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('5000.0000') });
+        const receiver = makeReceiverAccount({ balance: new Prisma.Decimal('1000.0000') });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(receiver)
+            .mockResolvedValueOnce({ ...sender, balance: new Prisma.Decimal('3499.5000') })
+            .mockResolvedValueOnce({ ...receiver, balance: new Prisma.Decimal('2500.5000') });
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(makeTransactionRecord());
+
+        await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '1500.5000',
+            reference:     'ref-bal-receiver',
+        });
+
+        expect(prismaMock.transaction.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    type: 'TRANSFER',
+                    status: 'COMPLETED',
+                    receiverBalanceBefore: new Prisma.Decimal('1000.0000'),
+                    receiverBalanceAfter:  new Prisma.Decimal('2500.5000'),
+                })
+            })
+        );
+    });
+
+    it('captures accurate deposit before/after balances on receiver fields (sender fields null)', async () => {
+        const account = makeSenderAccount({ balance: new Prisma.Decimal('200.0000') });
+
+        prismaMock.account.findFirst.mockResolvedValue(account);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany.mockResolvedValueOnce({ count: 1 });
+        prismaMock.account.findUnique.mockResolvedValueOnce({
+            ...account,
+            balance: new Prisma.Decimal('500.2500'),
+        });
+        prismaMock.transaction.create.mockResolvedValue(makeTransactionRecord());
+
+        await TransactionService.depositMoney('user-1', {
+            accountId: 'acc-sender',
+            amount: '300.2500',
+            reference: 'ref-bal-dep',
+        });
+
+        expect(prismaMock.transaction.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    type: 'DEPOSIT',
+                    status: 'COMPLETED',
+                    senderBalanceBefore: null,
+                    senderBalanceAfter:  null,
+                    receiverBalanceBefore: new Prisma.Decimal('200.0000'),
+                    receiverBalanceAfter:  new Prisma.Decimal('500.2500'),
+                })
+            })
+        );
+    });
+
+    it('captures accurate withdrawal before/after balances on sender fields (receiver fields null)', async () => {
+        const account = makeSenderAccount({ balance: new Prisma.Decimal('1000.0000') });
+
+        prismaMock.account.findFirst.mockResolvedValue(account);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany.mockResolvedValueOnce({ count: 1 });
+        prismaMock.account.findUnique.mockResolvedValueOnce({
+            ...account,
+            balance: new Prisma.Decimal('749.2500'),
+        });
+        prismaMock.transaction.create.mockResolvedValue(makeTransactionRecord());
+
+        await TransactionService.withdrawMoney('user-1', {
+            accountId: 'acc-sender',
+            amount: '250.7500',
+            reference: 'ref-bal-with',
+        });
+
+        expect(prismaMock.transaction.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    type: 'WITHDRAWAL',
+                    status: 'COMPLETED',
+                    senderBalanceBefore: new Prisma.Decimal('1000.0000'),
+                    senderBalanceAfter:  new Prisma.Decimal('749.2500'),
+                    receiverBalanceBefore: null,
+                    receiverBalanceAfter:  null,
+                })
+            })
+        );
+    });
+
+    it('preserves Decimal precision to 4 decimal places without floating-point errors', async () => {
+        // Test classic float issue: 0.1 + 0.2 === 0.30000000000000004
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('10.3000') });
+        const receiver = makeReceiverAccount({ balance: new Prisma.Decimal('0.1000') });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(receiver)
+            .mockResolvedValueOnce({ ...sender, balance: new Prisma.Decimal('10.1000') })
+            .mockResolvedValueOnce({ ...receiver, balance: new Prisma.Decimal('0.3000') });
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(makeTransactionRecord());
+
+        await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '0.2000',
+            reference:     'ref-bal-precision',
+        });
+
+        expect(prismaMock.transaction.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    senderBalanceBefore:   new Prisma.Decimal('10.3000'),
+                    senderBalanceAfter:    new Prisma.Decimal('10.1000'),
+                    receiverBalanceBefore: new Prisma.Decimal('0.1000'),
+                    receiverBalanceAfter:  new Prisma.Decimal('0.3000'),
+                })
+            })
+        );
+    });
+
+    it('ensures insufficient funds leaves balances unchanged and aborts transfer', async () => {
+        const sender = makeSenderAccount({ balance: new Prisma.Decimal('50.0000') });
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany.mockResolvedValueOnce({ count: 0 }); // Sender update fails
+        prismaMock.transaction.create.mockResolvedValue(makeTransactionRecord());
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-insufficient-fail',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: 'Insufficient funds',
+        });
+
+        // Inside tx, transaction.create with status COMPLETED was never called
+        expect(prismaMock.transaction.create).not.toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    status: 'COMPLETED',
+                })
+            })
+        );
+    });
+
+    it('records a FAILED transaction snapshot with null balances on genuine transaction failure', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany.mockResolvedValueOnce({ count: 0 }); // Insufficient funds in tx
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '500.00',
+                reference:     'ref-failed-snapshot',
+            })
+        ).rejects.toThrow();
+
+        // FAILED record created outside the aborted tx
+        expect(prismaMock.transaction.create).toHaveBeenCalledWith({
+            data: {
+                reference: 'ref-failed-snapshot',
+                amount: new Prisma.Decimal('500.00'),
+                type: 'TRANSFER',
+                status: 'FAILED',
+                description: 'Insufficient funds',
+                fromAccountId: 'acc-sender',
+                toAccountId: 'acc-receiver',
+                senderBalanceBefore: null,
+                senderBalanceAfter:  null,
+                receiverBalanceBefore: null,
+                receiverBalanceAfter:  null,
+            }
+        });
+    });
+
+    it('ensures rollback leaves no successful transaction record and failure-audit write does not alter error', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique.mockResolvedValue(receiver);
+        // Simulate DB transaction throwing an error
+        prismaMock.$transaction.mockRejectedValueOnce(new Error('DB deadlock detected'));
+        // Even if creating the FAILED record also encounters an error
+        prismaMock.transaction.create.mockRejectedValueOnce(new Error('Audit write DB down'));
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId:   'acc-receiver',
+                amount:        '100.00',
+                reference:     'ref-rollback-resilient',
+            })
+        ).rejects.toThrow('DB deadlock detected'); // Original error must be preserved
+    });
+});

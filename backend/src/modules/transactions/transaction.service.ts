@@ -120,6 +120,13 @@ export const TransactionService = {
                     throw new AppError('Insufficient funds', 400);
                 }
 
+                const senderAccount = await tx.account.findUnique({ where: { id: fromAccountId } });
+                if (!senderAccount) throw new AppError('Sender account not found', 404);
+                const senderBalanceAfter = senderAccount.balance instanceof Prisma.Decimal
+                    ? senderAccount.balance
+                    : new Prisma.Decimal(senderAccount.balance);
+                const senderBalanceBefore = senderBalanceAfter.plus(decimalAmount);
+
                 const updatedReceiver = await tx.account.updateMany({
                     where: { id: toAccountId, status: 'ACTIVE' },
                     data: { balance: { increment: decimalAmount } }
@@ -129,6 +136,13 @@ export const TransactionService = {
                     throw new AppError('Receiver account not found or not active', 404);
                 }
 
+                const receiverAccount = await tx.account.findUnique({ where: { id: toAccountId } });
+                if (!receiverAccount) throw new AppError('Receiver account not found', 404);
+                const receiverBalanceAfter = receiverAccount.balance instanceof Prisma.Decimal
+                    ? receiverAccount.balance
+                    : new Prisma.Decimal(receiverAccount.balance);
+                const receiverBalanceBefore = receiverBalanceAfter.minus(decimalAmount);
+
                 const record = await tx.transaction.create({
                     data: {
                         reference,
@@ -137,7 +151,11 @@ export const TransactionService = {
                         status: 'COMPLETED',
                         description: description ?? null,
                         fromAccountId,
-                        toAccountId
+                        toAccountId,
+                        senderBalanceBefore,
+                        senderBalanceAfter,
+                        receiverBalanceBefore,
+                        receiverBalanceAfter,
                     }
                 });
 
@@ -163,10 +181,30 @@ export const TransactionService = {
 
             return transactionRecord;
         } catch (error: any) {
-
             if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
                 throw new AppError('Duplicate transaction request', 409);
             }
+
+            try {
+                await prisma.transaction.create({
+                    data: {
+                        reference,
+                        amount: decimalAmount,
+                        type: 'TRANSFER',
+                        status: 'FAILED',
+                        description: error.message ?? 'Transfer failed',
+                        fromAccountId,
+                        toAccountId,
+                        senderBalanceBefore: null,
+                        senderBalanceAfter: null,
+                        receiverBalanceBefore: null,
+                        receiverBalanceAfter: null,
+                    }
+                });
+            } catch {
+                // Best-effort failure audit write must never change original error behavior
+            }
+
             throw error;
         }
     },
@@ -194,6 +232,14 @@ export const TransactionService = {
                     throw new AppError('Account not found', 404);
                 }
 
+                const updated = await tx.account.findUnique({ where: { id: accountId } });
+                if (!updated) throw new AppError('Account not found', 404);
+
+                const receiverBalanceAfter = updated.balance instanceof Prisma.Decimal
+                    ? updated.balance
+                    : new Prisma.Decimal(updated.balance);
+                const receiverBalanceBefore = receiverBalanceAfter.minus(decimalAmount);
+
                 const record = await tx.transaction.create({
                     data: {
                         reference,
@@ -201,7 +247,11 @@ export const TransactionService = {
                         type: 'DEPOSIT',
                         status: 'COMPLETED',
                         description: description ?? null,
-                        toAccountId: accountId
+                        toAccountId: accountId,
+                        senderBalanceBefore: null,
+                        senderBalanceAfter: null,
+                        receiverBalanceBefore,
+                        receiverBalanceAfter,
                     }
                 });
 
@@ -213,6 +263,26 @@ export const TransactionService = {
             if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
                 throw new AppError('Duplicate transaction request', 409);
             }
+
+            try {
+                await prisma.transaction.create({
+                    data: {
+                        reference,
+                        amount: decimalAmount,
+                        type: 'DEPOSIT',
+                        status: 'FAILED',
+                        description: error.message ?? 'Deposit failed',
+                        toAccountId: accountId,
+                        senderBalanceBefore: null,
+                        senderBalanceAfter: null,
+                        receiverBalanceBefore: null,
+                        receiverBalanceAfter: null,
+                    }
+                });
+            } catch {
+                // Best-effort
+            }
+
             throw error;
         }
     },
@@ -238,6 +308,14 @@ export const TransactionService = {
 
                 if (updatedAccount.count === 0) throw new AppError('Insufficient funds', 400);
 
+                const updated = await tx.account.findUnique({ where: { id: accountId } });
+                if (!updated) throw new AppError('Account not found', 404);
+
+                const senderBalanceAfter = updated.balance instanceof Prisma.Decimal
+                    ? updated.balance
+                    : new Prisma.Decimal(updated.balance);
+                const senderBalanceBefore = senderBalanceAfter.plus(decimalAmount);
+
                 const record = await tx.transaction.create({
                     data: {
                         reference,
@@ -245,7 +323,11 @@ export const TransactionService = {
                         type: 'WITHDRAWAL',
                         status: 'COMPLETED',
                         description: description ?? null,
-                        fromAccountId: accountId
+                        fromAccountId: accountId,
+                        senderBalanceBefore,
+                        senderBalanceAfter,
+                        receiverBalanceBefore: null,
+                        receiverBalanceAfter: null,
                     }
                 });
 
@@ -257,6 +339,26 @@ export const TransactionService = {
             if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
                 throw new AppError('Duplicate transaction request', 409);
             }
+
+            try {
+                await prisma.transaction.create({
+                    data: {
+                        reference,
+                        amount: decimalAmount,
+                        type: 'WITHDRAWAL',
+                        status: 'FAILED',
+                        description: error.message ?? 'Withdrawal failed',
+                        fromAccountId: accountId,
+                        senderBalanceBefore: null,
+                        senderBalanceAfter: null,
+                        receiverBalanceBefore: null,
+                        receiverBalanceAfter: null,
+                    }
+                });
+            } catch {
+                // Best-effort
+            }
+
             throw error;
         }
     },
