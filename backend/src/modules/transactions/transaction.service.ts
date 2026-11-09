@@ -1,8 +1,19 @@
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../utils/AppError.js';
-import { Prisma } from '@prisma/client';
+import { Prisma, TransactionStatus, TransactionType } from '@prisma/client';
 import { getTransferLimits } from '../../config/transferLimits.js';
 import { AuditLogger } from '../../utils/auditLogger.js';
+import { parseDateFilter } from '../../utils/dateFilter.js';
+
+export interface TransactionFilters {
+    startDate?: string | Date | undefined;
+    endDate?: string | Date | undefined;
+    status?: TransactionStatus | undefined;
+    type?: TransactionType | undefined;
+    minAmount?: string | Prisma.Decimal | undefined;
+    maxAmount?: string | Prisma.Decimal | undefined;
+    direction?: 'INCOMING' | 'OUTGOING' | undefined;
+}
 
 interface TransferInput {
     fromAccountId: string;
@@ -387,12 +398,129 @@ export const TransactionService = {
         }
     },
 
-    async getTransactionHistory(userId: string, accountId: string, limit: number, cursor?: string) {
+    async getTransactionHistory(
+        userId: string,
+        accountId: string,
+        limit: number = 10,
+        cursor?: string,
+        filters?: TransactionFilters
+    ) {
         const account = await prisma.account.findFirst({
             where: { id: accountId, userId }
         });
 
         if (!account) throw new AppError('Account not found or unauthorized', 404);
+
+        const andConditions: Prisma.TransactionWhereInput[] = [];
+
+        // ---------------------------------------------------------------------------
+        // Direction filter & Account ownership composition:
+        // - INCOMING: filters to toAccountId (credited to user's account)
+        // - OUTGOING: filters to fromAccountId (debited from user's account)
+        // - default: either fromAccountId OR toAccountId must be user's account
+        // ---------------------------------------------------------------------------
+        if (filters?.direction === 'INCOMING') {
+            andConditions.push({ toAccountId: accountId });
+        } else if (filters?.direction === 'OUTGOING') {
+            andConditions.push({ fromAccountId: accountId });
+        } else if (filters?.direction !== undefined) {
+            throw new AppError('Invalid direction filter. Must be INCOMING or OUTGOING', 400);
+        } else {
+            andConditions.push({
+                OR: [
+                    { fromAccountId: accountId },
+                    { toAccountId: accountId },
+                ],
+            });
+        }
+
+        if (filters?.status !== undefined) {
+            if (!['PENDING', 'COMPLETED', 'FAILED', 'REVERSED'].includes(filters.status)) {
+                throw new AppError('Invalid transaction status', 400);
+            }
+            andConditions.push({ status: filters.status });
+        }
+
+        if (filters?.type !== undefined) {
+            if (!['DEPOSIT', 'WITHDRAWAL', 'TRANSFER'].includes(filters.type)) {
+                throw new AppError('Invalid transaction type', 400);
+            }
+            andConditions.push({ type: filters.type });
+        }
+
+        let parsedStart: Date | undefined;
+        let parsedEnd: Date | undefined;
+
+        if (filters?.startDate !== undefined) {
+            if (filters.startDate instanceof Date) {
+                if (isNaN(filters.startDate.getTime())) throw new AppError('Invalid startDate format', 400);
+                parsedStart = filters.startDate;
+            } else {
+                if (isNaN(Date.parse(filters.startDate))) throw new AppError('Invalid startDate format', 400);
+                parsedStart = parseDateFilter(filters.startDate, false);
+            }
+        }
+
+        if (filters?.endDate !== undefined) {
+            if (filters.endDate instanceof Date) {
+                if (isNaN(filters.endDate.getTime())) throw new AppError('Invalid endDate format', 400);
+                parsedEnd = filters.endDate;
+            } else {
+                if (isNaN(Date.parse(filters.endDate))) throw new AppError('Invalid endDate format', 400);
+                parsedEnd = parseDateFilter(filters.endDate, true);
+            }
+        }
+
+        if (parsedStart && parsedEnd && parsedStart > parsedEnd) {
+            throw new AppError('startDate cannot be after endDate', 400);
+        }
+
+        if (parsedStart || parsedEnd) {
+            const createdAtFilter: Prisma.DateTimeFilter = {};
+            if (parsedStart) createdAtFilter.gte = parsedStart;
+            if (parsedEnd) createdAtFilter.lte = parsedEnd;
+            andConditions.push({ createdAt: createdAtFilter });
+        }
+
+        let minDec: Prisma.Decimal | undefined;
+        let maxDec: Prisma.Decimal | undefined;
+
+        if (filters?.minAmount !== undefined) {
+            try {
+                minDec = filters.minAmount instanceof Prisma.Decimal
+                    ? filters.minAmount
+                    : new Prisma.Decimal(filters.minAmount);
+            } catch {
+                throw new AppError('Invalid minAmount format', 400);
+            }
+            if (minDec.lt(0)) {
+                throw new AppError('minAmount cannot be negative', 400);
+            }
+        }
+
+        if (filters?.maxAmount !== undefined) {
+            try {
+                maxDec = filters.maxAmount instanceof Prisma.Decimal
+                    ? filters.maxAmount
+                    : new Prisma.Decimal(filters.maxAmount);
+            } catch {
+                throw new AppError('Invalid maxAmount format', 400);
+            }
+            if (maxDec.lt(0)) {
+                throw new AppError('maxAmount cannot be negative', 400);
+            }
+        }
+
+        if (minDec !== undefined && maxDec !== undefined && minDec.gt(maxDec)) {
+            throw new AppError('minAmount cannot be greater than maxAmount', 400);
+        }
+
+        if (minDec !== undefined || maxDec !== undefined) {
+            const amountFilter: Prisma.DecimalFilter = {};
+            if (minDec !== undefined) amountFilter.gte = minDec;
+            if (maxDec !== undefined) amountFilter.lte = maxDec;
+            andConditions.push({ amount: amountFilter });
+        }
 
         const query = {
             take: limit + 1,
@@ -401,10 +529,7 @@ export const TransactionService = {
                 skip: 1,
             }),
             where: {
-                OR: [
-                    { fromAccountId: accountId },
-                    { toAccountId: accountId },
-                ],
+                AND: andConditions,
             },
             orderBy: {
                 createdAt: 'desc',

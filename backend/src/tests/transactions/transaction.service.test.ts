@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { prismaMock } from '../setup.js';
 import { TransactionService } from '../../modules/transactions/transaction.service.js';
-import { transferSchema } from '../../modules/transactions/transaction.schema.js';
+import { transferSchema, getTransactionsSchema } from '../../modules/transactions/transaction.schema.js';
 import { AppError } from '../../utils/AppError.js';
 
 // ---------------------------------------------------------------------------
@@ -1609,5 +1609,596 @@ describe('Phase 7: Transfer by Account Number', () => {
             }
         });
         expect(hasLetters.success).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 8: Transaction Filtering
+// ---------------------------------------------------------------------------
+
+describe('Phase 8: Transaction Filtering', () => {
+    it('rejects history request when account does not belong to user (ownership protection)', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(null);
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-other', 10)
+        ).rejects.toMatchObject({
+            statusCode: 404,
+            message: expect.stringContaining('Account not found or unauthorized'),
+        });
+
+        expect(prismaMock.transaction.findMany).not.toHaveBeenCalled();
+    });
+
+    it('filters by date-only startDate using start of calendar day (00:00:00.000Z)', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            startDate: '2026-05-10',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([
+                        { createdAt: { gte: new Date('2026-05-10T00:00:00.000Z') } },
+                    ]),
+                }),
+            })
+        );
+    });
+
+    it('filters by date-only endDate using end of calendar day (23:59:59.999Z)', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            endDate: '2026-05-10',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([
+                        { createdAt: { lte: new Date('2026-05-10T23:59:59.999Z') } },
+                    ]),
+                }),
+            })
+        );
+    });
+
+    it('preserves explicit timestamp and timezone semantics for date filters', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        const startTime = '2026-05-10T14:30:00.000Z';
+        const endTime = '2026-05-10T18:45:00.000Z';
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            startDate: startTime,
+            endDate: endTime,
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([
+                        {
+                            createdAt: {
+                                gte: new Date(startTime),
+                                lte: new Date(endTime),
+                            },
+                        },
+                    ]),
+                }),
+            })
+        );
+    });
+
+    it('accepts equal startDate and endDate as a valid date boundary', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        // Date-only equality (same calendar day)
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                startDate: '2026-05-10',
+                endDate: '2026-05-10',
+            })
+        ).resolves.not.toThrow();
+
+        // Exact timestamp equality
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                startDate: '2026-05-10T12:00:00.000Z',
+                endDate: '2026-05-10T12:00:00.000Z',
+            })
+        ).resolves.not.toThrow();
+    });
+
+    it('rejects when startDate is after endDate', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                startDate: '2026-05-11',
+                endDate: '2026-05-10',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('startDate cannot be after endDate'),
+        });
+    });
+
+    it('rejects invalid date formats', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                startDate: 'not-a-date',
+            })
+        ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('Invalid startDate') });
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                endDate: 'not-a-date',
+            })
+        ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('Invalid endDate') });
+    });
+
+    it('filters by status (COMPLETED, FAILED, PENDING, REVERSED)', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            status: 'COMPLETED',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([{ status: 'COMPLETED' }]),
+                }),
+            })
+        );
+    });
+
+    it('rejects invalid status enum', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                status: 'INVALID_STATUS' as any,
+            })
+        ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('Invalid transaction status') });
+    });
+
+    it('filters by type (DEPOSIT, WITHDRAWAL, TRANSFER)', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            type: 'TRANSFER',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([{ type: 'TRANSFER' }]),
+                }),
+            })
+        );
+    });
+
+    it('rejects invalid type enum', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                type: 'INVALID_TYPE' as any,
+            })
+        ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('Invalid transaction type') });
+    });
+
+    it('filters by minAmount and maxAmount using Decimal comparisons', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            minAmount: '100.5000',
+            maxAmount: '500.7500',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([
+                        {
+                            amount: {
+                                gte: new Prisma.Decimal('100.5000'),
+                                lte: new Prisma.Decimal('500.7500'),
+                            },
+                        },
+                    ]),
+                }),
+            })
+        );
+    });
+
+    it('accepts equal minAmount and maxAmount as a valid amount boundary', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                minAmount: '100.00',
+                maxAmount: '100.00',
+            })
+        ).resolves.not.toThrow();
+    });
+
+    it('accepts zero minAmount (0.00) as boundary', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                minAmount: '0.00',
+            })
+        ).resolves.not.toThrow();
+    });
+
+    it('preserves Decimal precision to 4 decimal places during monetary filtering', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            minAmount: '100.1234',
+            maxAmount: '200.5678',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([
+                        {
+                            amount: {
+                                gte: new Prisma.Decimal('100.1234'),
+                                lte: new Prisma.Decimal('200.5678'),
+                            },
+                        },
+                    ]),
+                }),
+            })
+        );
+    });
+
+    it('rejects negative minAmount and maxAmount', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                minAmount: '-10.00',
+            })
+        ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('minAmount cannot be negative') });
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                maxAmount: '-5.00',
+            })
+        ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('maxAmount cannot be negative') });
+    });
+
+    it('rejects when minAmount is greater than maxAmount', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                minAmount: '500.00',
+                maxAmount: '100.00',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('minAmount cannot be greater than maxAmount'),
+        });
+    });
+
+    it('direction INCOMING filters strictly to toAccountId without overriding account ownership', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            direction: 'INCOMING',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([{ toAccountId: 'acc-sender' }]),
+                }),
+            })
+        );
+    });
+
+    it('direction OUTGOING filters strictly to fromAccountId without overriding account ownership', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+            direction: 'OUTGOING',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([{ fromAccountId: 'acc-sender' }]),
+                }),
+            })
+        );
+    });
+
+    it('omitting direction defaults to either fromAccountId OR toAccountId', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-sender', 10);
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    AND: expect.arrayContaining([
+                        {
+                            OR: [
+                                { fromAccountId: 'acc-sender' },
+                                { toAccountId: 'acc-sender' },
+                            ],
+                        },
+                    ]),
+                }),
+            })
+        );
+    });
+
+    it('rejects invalid direction enum', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+
+        await expect(
+            TransactionService.getTransactionHistory('user-1', 'acc-sender', 10, undefined, {
+                direction: 'INVALID' as any,
+            })
+        ).rejects.toMatchObject({ statusCode: 400, message: expect.stringContaining('Invalid direction') });
+    });
+
+    it('correctly maps direction IN and OUT for returned records', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount({ id: 'acc-user' }));
+
+        const records = [
+            // Outgoing transfer (user is sender)
+            {
+                ...makeTransactionRecord({ id: 't1', fromAccountId: 'acc-user', toAccountId: 'acc-other' }),
+                fromAccount: { user: { firstName: 'Me', lastName: 'User' } },
+                toAccount: { user: { firstName: 'Other', lastName: 'Person' } },
+            },
+            // Incoming transfer (user is receiver)
+            {
+                ...makeTransactionRecord({ id: 't2', fromAccountId: 'acc-other', toAccountId: 'acc-user' }),
+                fromAccount: { user: { firstName: 'Other', lastName: 'Person' } },
+                toAccount: { user: { firstName: 'Me', lastName: 'User' } },
+            },
+            // Deposit (user is toAccountId)
+            {
+                ...makeTransactionRecord({ id: 't3', fromAccountId: null, toAccountId: 'acc-user', type: 'DEPOSIT' as any }),
+                fromAccount: null,
+                toAccount: { user: { firstName: 'Me', lastName: 'User' } },
+            },
+            // Withdrawal (user is fromAccountId)
+            {
+                ...makeTransactionRecord({ id: 't4', fromAccountId: 'acc-user', toAccountId: null, type: 'WITHDRAWAL' as any }),
+                fromAccount: { user: { firstName: 'Me', lastName: 'User' } },
+                toAccount: null,
+            },
+        ];
+
+        prismaMock.transaction.findMany.mockResolvedValue(records);
+
+        const result = await TransactionService.getTransactionHistory('user-1', 'acc-user', 10);
+
+        expect(result.data).toHaveLength(4);
+        expect(result.data[0]?.direction).toBe('OUT'); // Outgoing transfer
+        expect(result.data[1]?.direction).toBe('IN');  // Incoming transfer
+        expect(result.data[2]?.direction).toBe('IN');  // Deposit
+        expect(result.data[3]?.direction).toBe('OUT'); // Withdrawal
+    });
+
+    it('combines all 6 filters safely using AND semantics', async () => {
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount({ id: 'acc-user' }));
+        prismaMock.transaction.findMany.mockResolvedValue([]);
+
+        await TransactionService.getTransactionHistory('user-1', 'acc-user', 20, 'cursor-123', {
+            startDate: '2026-01-01',
+            endDate: '2026-06-30',
+            status: 'COMPLETED',
+            type: 'TRANSFER',
+            minAmount: '50.00',
+            maxAmount: '1000.00',
+            direction: 'INCOMING',
+        });
+
+        expect(prismaMock.transaction.findMany).toHaveBeenCalledWith({
+            take: 21,
+            cursor: { id: 'cursor-123' },
+            skip: 1,
+            orderBy: { createdAt: 'desc' },
+            where: {
+                AND: [
+                    { toAccountId: 'acc-user' },
+                    { status: 'COMPLETED' },
+                    { type: 'TRANSFER' },
+                    {
+                        createdAt: {
+                            gte: new Date('2026-01-01T00:00:00.000Z'),
+                            lte: new Date('2026-06-30T23:59:59.999Z'),
+                        },
+                    },
+                    {
+                        amount: {
+                            gte: new Prisma.Decimal('50.00'),
+                            lte: new Prisma.Decimal('1000.00'),
+                        },
+                    },
+                ],
+            },
+            include: expect.any(Object),
+        });
+    });
+
+    // ---------------------------------------------------------------------------
+    // Zod Schema Validation Tests for getTransactionsSchema
+    // ---------------------------------------------------------------------------
+
+    it('getTransactionsSchema accepts valid query with accountId only', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+            },
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('getTransactionsSchema accepts all valid query parameters combined', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                limit: '25',
+                cursor: '550e8400-e29b-41d4-a716-446655440001',
+                startDate: '2026-01-01',
+                endDate: '2026-01-31',
+                status: 'COMPLETED',
+                type: 'TRANSFER',
+                minAmount: '10.00',
+                maxAmount: '500.00',
+                direction: 'OUTGOING',
+            },
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('getTransactionsSchema accepts ISO timestamp date inputs', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                startDate: '2026-01-01T10:00:00.000Z',
+                endDate: '2026-01-01T20:00:00.000Z',
+            },
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('getTransactionsSchema rejects invalid accountId format', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: 'invalid-uuid',
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('getTransactionsSchema rejects invalid date formats', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                startDate: 'not-a-date',
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('getTransactionsSchema rejects when startDate is after endDate', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                startDate: '2026-02-01',
+                endDate: '2026-01-01',
+            },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const messages = result.error.issues.map(i => i.message);
+            expect(messages).toContain('startDate cannot be after endDate');
+        }
+    });
+
+    it('getTransactionsSchema rejects invalid status enum', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                status: 'NOT_A_STATUS',
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('getTransactionsSchema rejects invalid type enum', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                type: 'NOT_A_TYPE',
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('getTransactionsSchema rejects invalid direction enum', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                direction: 'SIDEWAYS',
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('getTransactionsSchema rejects negative minAmount and maxAmount', () => {
+        const resMin = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                minAmount: '-10.00',
+            },
+        });
+        expect(resMin.success).toBe(false);
+
+        const resMax = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                maxAmount: '-50.00',
+            },
+        });
+        expect(resMax.success).toBe(false);
+    });
+
+    it('getTransactionsSchema rejects when minAmount is greater than maxAmount', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                minAmount: '500.00',
+                maxAmount: '100.00',
+            },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const messages = result.error.issues.map(i => i.message);
+            expect(messages).toContain('minAmount cannot be greater than maxAmount');
+        }
+    });
+
+    it('getTransactionsSchema rejects amounts with more than 4 decimal places', () => {
+        const result = getTransactionsSchema.safeParse({
+            query: {
+                accountId: '550e8400-e29b-41d4-a716-446655440000',
+                minAmount: '10.12345',
+            },
+        });
+        expect(result.success).toBe(false);
     });
 });

@@ -15,13 +15,33 @@ export const TransactionController = {
     },
 
     async getHistory(req: Request, res: Response) {
-        const { accountId, limit, cursor } = req.query;
+        const {
+            accountId,
+            limit,
+            cursor,
+            startDate,
+            endDate,
+            status,
+            type,
+            minAmount,
+            maxAmount,
+            direction,
+        } = req.query;
 
         const result = await TransactionService.getTransactionHistory(
             req.user!.id,
             accountId as string,
-            Number(limit),
-            cursor as string
+            limit ? Number(limit) : 10,
+            cursor as string | undefined,
+            {
+                startDate: startDate as string | undefined,
+                endDate: endDate as string | undefined,
+                status: status as any,
+                type: type as any,
+                minAmount: minAmount as string | undefined,
+                maxAmount: maxAmount as string | undefined,
+                direction: direction as any,
+            }
         );
 
         res.status(200).json({ success: true, ...result });
