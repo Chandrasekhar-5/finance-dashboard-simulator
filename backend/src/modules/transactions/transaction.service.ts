@@ -6,7 +6,10 @@ import { AuditLogger } from '../../utils/auditLogger.js';
 
 interface TransferInput {
     fromAccountId: string;
-    toAccountId: string;
+    /** Receiver identified by their account number (canonical new API). */
+    toAccountNumber?: string;
+    /** Receiver identified by their internal UUID (kept for backward compatibility). */
+    toAccountId?: string;
     amount: string | Prisma.Decimal;
     description?: string;
     reference: string;
@@ -33,9 +36,30 @@ interface RequestContext {
 
 export const TransactionService = {
     async transferMoney(userId: string, data: TransferInput, requestContext?: RequestContext) {
-        const { fromAccountId, toAccountId, amount, description, reference } = data;
+        const { fromAccountId, toAccountNumber, amount, description, reference } = data;
 
-        if (fromAccountId === toAccountId) throw new AppError('Cannot transfer money to the same account', 400);
+        // ---------------------------------------------------------------------------
+        // Phase 7: Resolve receiver account number → internal UUID.
+        // toAccountNumber is the canonical new API field.
+        // toAccountId is kept for backward compatibility with existing internal callers.
+        // All downstream logic operates on resolvedToAccountId (UUID) exclusively.
+        // ---------------------------------------------------------------------------
+        let resolvedToAccountId: string;
+        if (toAccountNumber !== undefined) {
+            const resolvedAccount = await prisma.account.findUnique({
+                where: { accountNumber: toAccountNumber }
+            });
+            if (!resolvedAccount) throw new AppError('Receiver account not found', 404);
+            resolvedToAccountId = resolvedAccount.id;
+        } else if (data.toAccountId !== undefined) {
+            resolvedToAccountId = data.toAccountId;
+        } else {
+            // Guard: schema validation should prevent this, but service must be safe
+            // when called directly (e.g. from tests or internal code paths).
+            throw new AppError('Either toAccountNumber or toAccountId is required', 400);
+        }
+
+        if (fromAccountId === resolvedToAccountId) throw new AppError('Cannot transfer money to the same account', 400);
 
         const decimalAmount = amount instanceof Prisma.Decimal ? amount : new Prisma.Decimal(amount);
         const limits = getTransferLimits();
@@ -59,7 +83,7 @@ export const TransactionService = {
         }
 
         const receiverAccount = await prisma.account.findUnique({
-            where: { id: toAccountId }
+            where: { id: resolvedToAccountId }
         });
 
         if (!receiverAccount) throw new AppError('Receiver account not found', 404);
@@ -128,7 +152,7 @@ export const TransactionService = {
                 const senderBalanceBefore = senderBalanceAfter.plus(decimalAmount);
 
                 const updatedReceiver = await tx.account.updateMany({
-                    where: { id: toAccountId, status: 'ACTIVE' },
+                    where: { id: resolvedToAccountId, status: 'ACTIVE' },
                     data: { balance: { increment: decimalAmount } }
                 });
 
@@ -136,7 +160,7 @@ export const TransactionService = {
                     throw new AppError('Receiver account not found or not active', 404);
                 }
 
-                const receiverAccount = await tx.account.findUnique({ where: { id: toAccountId } });
+                const receiverAccount = await tx.account.findUnique({ where: { id: resolvedToAccountId } });
                 if (!receiverAccount) throw new AppError('Receiver account not found', 404);
                 const receiverBalanceAfter = receiverAccount.balance instanceof Prisma.Decimal
                     ? receiverAccount.balance
@@ -151,7 +175,7 @@ export const TransactionService = {
                         status: 'COMPLETED',
                         description: description ?? null,
                         fromAccountId,
-                        toAccountId,
+                        toAccountId: resolvedToAccountId,
                         senderBalanceBefore,
                         senderBalanceAfter,
                         receiverBalanceBefore,
@@ -172,7 +196,7 @@ export const TransactionService = {
                     transactionId: transactionRecord.id,
                     reference: transactionRecord.reference,
                     fromAccountId,
-                    toAccountId,
+                    toAccountId: resolvedToAccountId,
                     amount: decimalAmount.toString(),
                     type: 'TRANSFER',
                     status: 'COMPLETED',
@@ -194,7 +218,7 @@ export const TransactionService = {
                         status: 'FAILED',
                         description: error.message ?? 'Transfer failed',
                         fromAccountId,
-                        toAccountId,
+                        toAccountId: resolvedToAccountId,
                         senderBalanceBefore: null,
                         senderBalanceAfter: null,
                         receiverBalanceBefore: null,

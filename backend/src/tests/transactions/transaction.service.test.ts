@@ -1224,3 +1224,390 @@ describe('Phase 6 — Before/After Balances & Transaction Status', () => {
         ).rejects.toThrow('DB deadlock detected'); // Original error must be preserved
     });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 7: Transfer by Account Number
+// ---------------------------------------------------------------------------
+
+describe('Phase 7: Transfer by Account Number', () => {
+    // Helper: set up a "happy path" $transaction mock that succeeds
+    const makeSuccessfulTxMock = (sender = makeSenderAccount(), receiver = makeReceiverAccount(), record = makeTransactionRecord()) => {
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 }) // sender decrement
+            .mockResolvedValueOnce({ count: 1 }); // receiver increment
+        prismaMock.transaction.create.mockResolvedValue(record);
+        return record;
+    };
+
+    it('resolves toAccountNumber to UUID and completes transfer', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount();  // id: 'acc-receiver'
+        const record = makeTransactionRecord();
+
+        // findUnique call order:
+        // 1. accountNumber resolution → returns receiver
+        // 2. Phase 4 status check (by id) → returns receiver
+        // 3. Inside $tx: sender balance snapshot → returns sender (via findUnique)
+        // 4. Inside $tx: receiver balance snapshot → returns receiver
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(receiver)   // 1. resolution
+            .mockResolvedValueOnce(receiver)   // 2. Phase 4 check
+            .mockResolvedValueOnce(sender)     // 3. sender snapshot inside tx
+            .mockResolvedValueOnce(receiver);  // 4. receiver snapshot inside tx
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        const result = await TransactionService.transferMoney('user-1', {
+            fromAccountId:   'acc-sender',
+            toAccountNumber: '2222222222',
+            amount:          '100.00',
+            reference:       'ref-p7-accnum-ok',
+        });
+
+        expect(result).toEqual(record);
+        // Resolution lookup was by accountNumber
+        expect(prismaMock.account.findUnique).toHaveBeenCalledWith({ where: { accountNumber: '2222222222' } });
+        // Transaction record must use the resolved UUID, not the account number
+        expect(prismaMock.transaction.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    toAccountId: 'acc-receiver',
+                    status: 'COMPLETED',
+                })
+            })
+        );
+    });
+
+    it('backward compat: transfer via toAccountId (UUID) still works', async () => {
+        const sender = makeSenderAccount();
+        const receiver = makeReceiverAccount();
+        const record = makeTransactionRecord();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        // findUnique sequence: Phase 4 check, then sender snapshot, then receiver snapshot
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(receiver)  // Phase 4 receiver status check
+            .mockResolvedValueOnce(sender)    // sender balance snapshot inside tx
+            .mockResolvedValueOnce(receiver); // receiver balance snapshot inside tx
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        const result = await TransactionService.transferMoney('user-1', {
+            fromAccountId: 'acc-sender',
+            toAccountId:   'acc-receiver',
+            amount:        '100.00',
+            reference:     'ref-p7-compat-id',
+        });
+
+        expect(result).toEqual(record);
+        // No accountNumber resolution call: findUnique should NOT have been called with accountNumber
+        const findUniqueCalls = prismaMock.account.findUnique.mock.calls;
+        const resolutionCall = findUniqueCalls.find((args: any[]) => args[0]?.where?.accountNumber !== undefined);
+        expect(resolutionCall).toBeUndefined();
+    });
+
+    it('rejects when neither toAccountId nor toAccountNumber is provided', async () => {
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                // neither toAccountId nor toAccountNumber
+                amount:        '100.00',
+                reference:     'ref-p7-neither',
+            } as any)
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('toAccountNumber or toAccountId is required'),
+        });
+
+        // No DB calls should have been made
+        expect(prismaMock.account.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 404 when toAccountNumber does not exist in the database', async () => {
+        // Resolution returns null → account not found
+        prismaMock.account.findUnique.mockResolvedValueOnce(null);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId:   'acc-sender',
+                toAccountNumber: '9999999999',
+                amount:          '100.00',
+                reference:       'ref-p7-no-accnum',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 404,
+            message: expect.stringContaining('Receiver account not found'),
+        });
+
+        // Resolution was attempted; no further DB calls
+        expect(prismaMock.account.findUnique).toHaveBeenCalledOnce();
+        expect(prismaMock.account.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 400 when receiver found by account number is INACTIVE', async () => {
+        const inactiveReceiver = makeReceiverAccount({ status: 'INACTIVE' as any });
+
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        // findUnique calls:
+        // 1. accountNumber resolution → inactiveReceiver
+        // 2. Phase 4 receiver status check by id → inactiveReceiver
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(inactiveReceiver)   // resolution
+            .mockResolvedValueOnce(inactiveReceiver);  // Phase 4 check
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId:   'acc-sender',
+                toAccountNumber: '3333333333',
+                amount:          '100.00',
+                reference:       'ref-p7-inactive',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('inactive'),
+        });
+
+        // No transaction was created
+        expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 400 when receiver found by account number is BLOCKED', async () => {
+        const blockedReceiver = makeReceiverAccount({ status: 'BLOCKED' as any });
+
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(blockedReceiver)   // resolution
+            .mockResolvedValueOnce(blockedReceiver);  // Phase 4 check
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId:   'acc-sender',
+                toAccountNumber: '3333333333',
+                amount:          '100.00',
+                reference:       'ref-p7-blocked',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('blocked'),
+        });
+    });
+
+    it('rejects with 400 when receiver found by account number is CLOSED', async () => {
+        const closedReceiver = makeReceiverAccount({ status: 'CLOSED' as any });
+
+        prismaMock.account.findFirst.mockResolvedValue(makeSenderAccount());
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(closedReceiver)   // resolution
+            .mockResolvedValueOnce(closedReceiver);  // Phase 4 check
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId:   'acc-sender',
+                toAccountNumber: '3333333333',
+                amount:          '100.00',
+                reference:       'ref-p7-closed',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('closed'),
+        });
+    });
+
+    it('rejects with 400 on currency mismatch when receiver found by account number', async () => {
+        const sender   = makeSenderAccount({ currency: 'INR' });
+        const receiver = makeReceiverAccount({ currency: 'USD' });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(receiver)   // resolution
+            .mockResolvedValueOnce(receiver);  // Phase 4 check
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId:   'acc-sender',
+                toAccountNumber: '2222222222',
+                amount:          '100.00',
+                reference:       'ref-p7-currency',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Currency mismatch'),
+        });
+    });
+
+    it('rejects with 400 when toAccountNumber resolves to the sender\'s own account', async () => {
+        // Sender and "receiver" are the same account
+        const account = makeSenderAccount({ id: 'acc-sender', accountNumber: '1111111111' });
+
+        // Resolution returns the same account as sender
+        prismaMock.account.findUnique.mockResolvedValueOnce(account);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId:   'acc-sender',
+                toAccountNumber: '1111111111',
+                amount:          '100.00',
+                reference:       'ref-p7-selfxfer',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('same account'),
+        });
+
+        // Self-transfer guard fires before sender lookup
+        expect(prismaMock.account.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('transaction record uses resolved UUID (not account number) for toAccountId', async () => {
+        const sender   = makeSenderAccount();
+        const receiver = makeReceiverAccount({ id: 'acc-receiver-uuid', accountNumber: '5555555555' });
+        const record   = makeTransactionRecord({ toAccountId: 'acc-receiver-uuid' });
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(receiver)   // resolution
+            .mockResolvedValueOnce(receiver)   // Phase 4 check
+            .mockResolvedValueOnce(sender)     // sender snapshot inside tx
+            .mockResolvedValueOnce(receiver);  // receiver snapshot inside tx
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        prismaMock.account.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 1 });
+        prismaMock.transaction.create.mockResolvedValue(record);
+
+        await TransactionService.transferMoney('user-1', {
+            fromAccountId:   'acc-sender',
+            toAccountNumber: '5555555555',
+            amount:          '100.00',
+            reference:       'ref-p7-uuid-in-record',
+        });
+
+        // The transaction record must reference the UUID, not the account number string
+        expect(prismaMock.transaction.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ toAccountId: 'acc-receiver-uuid' })
+            })
+        );
+        // The account number string must NOT appear in any create call data
+        const createCallData = prismaMock.transaction.create.mock.calls[0]?.[0]?.data;
+        expect(Object.values(createCallData ?? {})).not.toContain('5555555555');
+    });
+
+    it('insufficient funds via toAccountNumber path rejects correctly', async () => {
+        const sender   = makeSenderAccount({ balance: new Prisma.Decimal('50.00') });
+        const receiver = makeReceiverAccount();
+
+        prismaMock.account.findFirst.mockResolvedValue(sender);
+        prismaMock.account.findUnique
+            .mockResolvedValueOnce(receiver)   // resolution
+            .mockResolvedValueOnce(receiver);  // Phase 4 check
+
+        prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+        // Sender updateMany returns 0 (balance check failed)
+        prismaMock.account.updateMany.mockResolvedValueOnce({ count: 0 });
+        // findUnique inside tx for disambiguation (sender)
+        prismaMock.account.findUnique.mockResolvedValueOnce(sender);
+
+        await expect(
+            TransactionService.transferMoney('user-1', {
+                fromAccountId:   'acc-sender',
+                toAccountNumber: '2222222222',
+                amount:          '999.00',
+                reference:       'ref-p7-nofunds',
+            })
+        ).rejects.toMatchObject({
+            statusCode: 400,
+            message: expect.stringContaining('Insufficient'),
+        });
+    });
+
+    it('transferSchema: Zod rejects when neither toAccountId nor toAccountNumber provided', () => {
+        const result = transferSchema.safeParse({
+            body: {
+                fromAccountId: '550e8400-e29b-41d4-a716-446655440000',
+                amount:        '100.00',
+                reference:     '550e8400-e29b-41d4-a716-446655440001',
+            }
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const messages = result.error.issues.map(i => i.message);
+            expect(messages).toContain('Either toAccountNumber or toAccountId is required');
+        }
+    });
+
+    it('transferSchema: Zod rejects when both toAccountId and toAccountNumber provided', () => {
+        const result = transferSchema.safeParse({
+            body: {
+                fromAccountId:   '550e8400-e29b-41d4-a716-446655440000',
+                toAccountId:     '550e8400-e29b-41d4-a716-446655440002',
+                toAccountNumber: '1234567890',
+                amount:          '100.00',
+                reference:       '550e8400-e29b-41d4-a716-446655440001',
+            }
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            const messages = result.error.issues.map(i => i.message);
+            expect(messages).toContain('Provide only one of toAccountNumber or toAccountId, not both');
+        }
+    });
+
+    it('transferSchema: Zod accepts toAccountNumber alone (10 digits)', () => {
+        const result = transferSchema.safeParse({
+            body: {
+                fromAccountId:   '550e8400-e29b-41d4-a716-446655440000',
+                toAccountNumber: '1234567890',
+                amount:          '100.00',
+                reference:       '550e8400-e29b-41d4-a716-446655440001',
+            }
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('transferSchema: Zod accepts toAccountId alone (UUID)', () => {
+        const result = transferSchema.safeParse({
+            body: {
+                fromAccountId: '550e8400-e29b-41d4-a716-446655440000',
+                toAccountId:   '550e8400-e29b-41d4-a716-446655440002',
+                amount:        '100.00',
+                reference:     '550e8400-e29b-41d4-a716-446655440001',
+            }
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('transferSchema: Zod rejects toAccountNumber that is not 10 digits', () => {
+        const tooShort = transferSchema.safeParse({
+            body: {
+                fromAccountId:   '550e8400-e29b-41d4-a716-446655440000',
+                toAccountNumber: '123456789', // 9 digits
+                amount:          '100.00',
+                reference:       '550e8400-e29b-41d4-a716-446655440001',
+            }
+        });
+        expect(tooShort.success).toBe(false);
+
+        const hasLetters = transferSchema.safeParse({
+            body: {
+                fromAccountId:   '550e8400-e29b-41d4-a716-446655440000',
+                toAccountNumber: 'ABC1234567',
+                amount:          '100.00',
+                reference:       '550e8400-e29b-41d4-a716-446655440001',
+            }
+        });
+        expect(hasLetters.success).toBe(false);
+    });
+});
