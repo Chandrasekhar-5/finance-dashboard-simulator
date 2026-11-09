@@ -9,11 +9,11 @@ export const TokenStorage = {
     },
 
     async storeRefreshToken(userId: string, refreshToken: string, deviceInfo?: {
-        deviceId?: string;
-        deviceName?: string;
-        ipAddress?: string;
-        userAgent?: string;
-    }): Promise<void> {
+        deviceId?: string | undefined;
+        deviceName?: string | undefined;
+        ipAddress?: string | undefined;
+        userAgent?: string | undefined;
+    } | undefined): Promise<void> {
         
         const tokenHash = await this.hashToken(refreshToken);
         const expiresAt = new Date();

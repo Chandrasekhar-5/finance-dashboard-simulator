@@ -69,6 +69,14 @@ export const prismaMock = {
         update:     vi.fn(),
         deleteMany: vi.fn(),
     },
+    oAuthTicket: {
+        findUnique: vi.fn(),
+        findFirst:  vi.fn(),
+        create:     vi.fn(),
+        update:     vi.fn(),
+        updateMany: vi.fn(),
+        deleteMany: vi.fn(),
+    },
     $transaction: vi.fn(),
 };
 
@@ -92,5 +100,37 @@ beforeEach(() => {
         currency: 'INR',
         createdAt: new Date(),
         updatedAt: new Date(),
+    });
+
+    const mockTickets: Array<any> = [];
+    prismaMock.oAuthTicket.create.mockImplementation(async ({ data }: any) => {
+        const record = {
+            id: 'mock-ticket-' + Math.random().toString(36).substring(7),
+            ...data,
+            createdAt: new Date(),
+            usedAt: null,
+        };
+        mockTickets.push(record);
+        return record;
+    });
+    prismaMock.oAuthTicket.updateMany.mockImplementation(async ({ where, data }: any) => {
+        let count = 0;
+        for (const t of mockTickets) {
+            const hashMatch = !where.ticketHash || t.ticketHash === where.ticketHash;
+            const usedMatch = where.usedAt === null ? t.usedAt === null : true;
+            const expiryMatch = where.expiresAt?.gt ? t.expiresAt > where.expiresAt.gt : true;
+            if (hashMatch && usedMatch && expiryMatch) {
+                if (data.usedAt !== undefined) t.usedAt = data.usedAt;
+                count++;
+            }
+        }
+        return { count };
+    });
+    prismaMock.oAuthTicket.findUnique.mockImplementation(async ({ where }: any) => {
+        return mockTickets.find(t => t.ticketHash === where.ticketHash) ?? null;
+    });
+    prismaMock.oAuthTicket.deleteMany.mockImplementation(async () => {
+        mockTickets.length = 0;
+        return { count: 0 };
     });
 });

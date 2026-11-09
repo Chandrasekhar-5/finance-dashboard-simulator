@@ -155,6 +155,37 @@ export const TransactionService = {
                     throw new AppError('Insufficient funds', 400);
                 }
 
+                // HIGH-01: Concurrency-safe aggregate limit checks inside serialized transaction row lock
+                const txPast24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                const txDailyAgg = await tx.transaction.aggregate({
+                    where: {
+                        fromAccountId,
+                        type: 'TRANSFER',
+                        status: 'COMPLETED',
+                        createdAt: { gte: txPast24h }
+                    },
+                    _sum: { amount: true }
+                });
+                const txDailyUsed = txDailyAgg._sum.amount ?? new Prisma.Decimal(0);
+                if (txDailyUsed.plus(decimalAmount).gt(limits.dailyLimit)) {
+                    throw new AppError('Daily transfer limit exceeded', 400);
+                }
+
+                const txPast30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                const txMonthlyAgg = await tx.transaction.aggregate({
+                    where: {
+                        fromAccountId,
+                        type: 'TRANSFER',
+                        status: 'COMPLETED',
+                        createdAt: { gte: txPast30d }
+                    },
+                    _sum: { amount: true }
+                });
+                const txMonthlyUsed = txMonthlyAgg._sum.amount ?? new Prisma.Decimal(0);
+                if (txMonthlyUsed.plus(decimalAmount).gt(limits.monthlyLimit)) {
+                    throw new AppError('Monthly transfer limit exceeded', 400);
+                }
+
                 const senderAccount = await tx.account.findUnique({ where: { id: fromAccountId } });
                 if (!senderAccount) throw new AppError('Sender account not found', 404);
                 const senderBalanceAfter = senderAccount.balance instanceof Prisma.Decimal
@@ -220,6 +251,10 @@ export const TransactionService = {
                 throw new AppError('Duplicate transaction request', 409);
             }
 
+            if (error.message?.includes('limit exceeded')) {
+                throw error;
+            }
+
             try {
                 await prisma.transaction.create({
                     data: {
@@ -256,14 +291,22 @@ export const TransactionService = {
 
         if (!account) throw new AppError('Account not found or unauthorized', 404);
 
+        if (account.status !== 'ACTIVE') {
+            throw new AppError(`Account is ${account.status.toLowerCase()}`, 400);
+        }
+
         try {
             const transactionRecord = await prisma.$transaction(async (tx) => {
                 const updatedAccount = await tx.account.updateMany({
-                    where: { id: accountId },
+                    where: { id: accountId, status: 'ACTIVE' },
                     data: { balance: { increment: decimalAmount } }
                 });
 
                 if (updatedAccount.count === 0) {
+                    const checkAccount = await tx.account.findUnique({ where: { id: accountId } });
+                    if (checkAccount && checkAccount.status !== 'ACTIVE') {
+                        throw new AppError(`Account is ${checkAccount.status.toLowerCase()}`, 400);
+                    }
                     throw new AppError('Account not found', 404);
                 }
 
@@ -297,6 +340,10 @@ export const TransactionService = {
         } catch (error: any) {
             if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
                 throw new AppError('Duplicate transaction request', 409);
+            }
+
+            if (error.message?.includes('limit exceeded')) {
+                throw error;
             }
 
             try {
@@ -334,14 +381,27 @@ export const TransactionService = {
 
         if (!account) throw new AppError('Account not found or unauthorized', 404);
 
+        if (account.status !== 'ACTIVE') {
+            throw new AppError(`Account is ${account.status.toLowerCase()}`, 400);
+        }
+
         try {
             const transactionRecord = await prisma.$transaction(async (tx) => {
                 const updatedAccount = await tx.account.updateMany({
-                    where: { id: accountId, balance: { gte: decimalAmount } },
+                    where: { id: accountId, status: 'ACTIVE', balance: { gte: decimalAmount } },
                     data: { balance: { decrement: decimalAmount } }
                 });
 
-                if (updatedAccount.count === 0) throw new AppError('Insufficient funds', 400);
+                if (updatedAccount.count === 0) {
+                    const checkAccount = await tx.account.findUnique({ where: { id: accountId } });
+                    if (!checkAccount) {
+                        throw new AppError('Account not found', 404);
+                    }
+                    if (checkAccount.status !== 'ACTIVE') {
+                        throw new AppError(`Account is ${checkAccount.status.toLowerCase()}`, 400);
+                    }
+                    throw new AppError('Insufficient funds', 400);
+                }
 
                 const updated = await tx.account.findUnique({ where: { id: accountId } });
                 if (!updated) throw new AppError('Account not found', 404);
@@ -373,6 +433,10 @@ export const TransactionService = {
         } catch (error: any) {
             if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
                 throw new AppError('Duplicate transaction request', 409);
+            }
+
+            if (error.message?.includes('limit exceeded')) {
+                throw error;
             }
 
             try {

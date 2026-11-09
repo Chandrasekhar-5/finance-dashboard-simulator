@@ -25,11 +25,11 @@ interface LoginInput {
     password: string;
 }
 
-interface DeviceInfo {
-    deviceId?: string;
-    deviceName?: string;
-    ipAddress?: string;
-    userAgent?: string;
+export interface DeviceInfo {
+    deviceId?: string | undefined;
+    deviceName?: string | undefined;
+    ipAddress?: string | undefined;
+    userAgent?: string | undefined;
 }
 
 interface RequestContext {
@@ -133,7 +133,7 @@ export const AuthService = {
         if (!user.passwordHash) throw new AppError('This account uses Google login. Please sign in with Google.',400);
 
         const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
-        if (!isPasswordValid) throw new AppError('Invalid credentials', 401);
+        if (!isPasswordValid) throw new AppError('Invalid email or password', 401);
 
         await AuditLogger.log({
             userId: user.id,

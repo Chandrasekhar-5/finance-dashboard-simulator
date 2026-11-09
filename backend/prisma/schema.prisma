@@ -23,6 +23,7 @@ model User {
   passwordResets     PasswordReset[]
   emailVerifications EmailVerification[]
   oauthAccounts      OAuthAccount[]
+  oauthTickets       OAuthTicket[]
   auditLogs          AuditLog[]
 
   @@map("users")
@@ -151,6 +152,25 @@ model EmailVerification {
   @@index([userId])
   @@index([expiresAt])
   @@map("email_verifications")
+}
+
+model OAuthTicket {
+  id         String    @id @default(uuid())
+  userId     String
+  ticketHash String    @unique
+  deviceId   String?
+  deviceName String?
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  usedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_tickets")
 }
 
 enum AccountType {

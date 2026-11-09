@@ -33,6 +33,8 @@ const SENSITIVE_KEYS = new Set([
     'secret',
     'clientsecret',
     'authorization',
+    'ticket',
+    'oauthticket',
 ]);
 
 export const sanitizeMetadata = (obj: unknown): Prisma.InputJsonValue | undefined => {

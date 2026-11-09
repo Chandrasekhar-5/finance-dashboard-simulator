@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { AuthController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
-import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, resendVerificationEmail } from './auth.schema.js';
+import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, changePasswordSchema, resendVerificationEmail, oauthExchangeSchema } from './auth.schema.js';
 import { requireAuth } from '../../middleware/requireAuth.js';
 import { registerLimiter, loginLimiter, refreshLimiter, forgotPasswordLimiter, changePasswordLimiter } from '../../middleware/rateLimiter.js';
 import { requireEmailVerified } from '../../middleware/requireEmailVerification.js';
@@ -12,6 +12,7 @@ const router = Router();
 
 router.get('/google', OAuthController.googleAuth);
 router.get('/google/callback', OAuthController.googleCallback);
+router.post('/oauth/exchange', validate(oauthExchangeSchema), OAuthController.exchangeTicket);
 
 
 router.post('/oauth/link/:provider', requireAuth, OAuthController.linkGoogle);

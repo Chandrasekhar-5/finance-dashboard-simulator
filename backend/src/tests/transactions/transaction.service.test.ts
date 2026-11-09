@@ -2202,3 +2202,234 @@ describe('Phase 8: Transaction Filtering', () => {
         expect(result.success).toBe(false);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 11 Security Fix Tests: HIGH-01 and HIGH-02
+// ---------------------------------------------------------------------------
+
+describe('Phase 11 Security Fixes: HIGH-01 Concurrent Transfer Limits & HIGH-02 Account Status Validation', () => {
+    describe('HIGH-02: Account Status Validation on depositMoney', () => {
+        const statuses = ['INACTIVE', 'CLOSED', 'BLOCKED', 'FROZEN', 'SUSPENDED'] as const;
+
+        statuses.forEach((status) => {
+            it(`rejects depositMoney when account status is ${status}`, async () => {
+                const account = makeSenderAccount({ status: status as any });
+                prismaMock.account.findFirst.mockResolvedValue(account);
+
+                await expect(
+                    TransactionService.depositMoney('user-1', {
+                        accountId: 'acc-sender',
+                        amount: '100.00',
+                        reference: `ref-dep-${status.toLowerCase()}`,
+                    })
+                ).rejects.toMatchObject({
+                    statusCode: 400,
+                    message: `Account is ${status.toLowerCase()}`,
+                });
+            });
+        });
+
+        it('rejects depositMoney if account becomes non-ACTIVE during atomic transaction', async () => {
+            const initialAccount = makeSenderAccount({ status: 'ACTIVE' });
+            prismaMock.account.findFirst.mockResolvedValue(initialAccount);
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+            // Simulate status changing between findFirst and updateMany (updateMany finds 0 rows with status: 'ACTIVE')
+            prismaMock.account.updateMany.mockResolvedValueOnce({ count: 0 });
+            prismaMock.account.findUnique.mockResolvedValueOnce({
+                ...initialAccount,
+                status: 'FROZEN' as any,
+            });
+
+            await expect(
+                TransactionService.depositMoney('user-1', {
+                    accountId: 'acc-sender',
+                    amount: '100.00',
+                    reference: 'ref-dep-atomic-status',
+                })
+            ).rejects.toMatchObject({
+                statusCode: 400,
+                message: 'Account is frozen',
+            });
+        });
+    });
+
+    describe('HIGH-02: Account Status Validation on withdrawMoney', () => {
+        const statuses = ['INACTIVE', 'CLOSED', 'BLOCKED', 'FROZEN', 'SUSPENDED'] as const;
+
+        statuses.forEach((status) => {
+            it(`rejects withdrawMoney when account status is ${status}`, async () => {
+                const account = makeSenderAccount({ status: status as any });
+                prismaMock.account.findFirst.mockResolvedValue(account);
+
+                await expect(
+                    TransactionService.withdrawMoney('user-1', {
+                        accountId: 'acc-sender',
+                        amount: '100.00',
+                        reference: `ref-wth-${status.toLowerCase()}`,
+                    })
+                ).rejects.toMatchObject({
+                    statusCode: 400,
+                    message: `Account is ${status.toLowerCase()}`,
+                });
+            });
+        });
+
+        it('rejects withdrawMoney if account becomes non-ACTIVE during atomic transaction', async () => {
+            const initialAccount = makeSenderAccount({ status: 'ACTIVE', balance: new Prisma.Decimal('5000.00') });
+            prismaMock.account.findFirst.mockResolvedValue(initialAccount);
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+            // Simulate updateMany matching 0 rows because status is no longer ACTIVE
+            prismaMock.account.updateMany.mockResolvedValueOnce({ count: 0 });
+            prismaMock.account.findUnique.mockResolvedValueOnce({
+                ...initialAccount,
+                status: 'BLOCKED' as any,
+            });
+
+            await expect(
+                TransactionService.withdrawMoney('user-1', {
+                    accountId: 'acc-sender',
+                    amount: '100.00',
+                    reference: 'ref-wth-atomic-status',
+                })
+            ).rejects.toMatchObject({
+                statusCode: 400,
+                message: 'Account is blocked',
+            });
+        });
+    });
+
+    describe('HIGH-01: Concurrent Transfer Limits Protection', () => {
+        it('rejects transfer when aggregate within serialized transaction exceeds daily limit', async () => {
+            const sender = makeSenderAccount({ balance: new Prisma.Decimal('10000000.00') });
+            prismaMock.account.findFirst.mockResolvedValue(sender);
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+            prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+
+            // Pre-check outside tx sees 4,000,000 (passes: 4M + 800k = 4.8M <= 5M)
+            // Inside tx, after acquiring lock, another committed concurrent transfer raised daily aggregate to 4,500,000
+            // Now 4,500,000 + 800,000 = 5,300,000 > 5,000,000 -> throws Daily transfer limit exceeded
+            prismaMock.transaction.aggregate
+                .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('4000000.00') } }) // outside tx daily precheck
+                .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('5000000.00') } }) // outside tx monthly precheck
+                .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('4500000.00') } }); // inside tx daily check
+
+            await expect(
+                TransactionService.transferMoney('user-1', {
+                    fromAccountId: 'acc-sender',
+                    toAccountId: 'acc-receiver',
+                    amount: '800000.00',
+                    reference: 'ref-concurrent-daily',
+                })
+            ).rejects.toMatchObject({
+                statusCode: 400,
+                message: expect.stringContaining('Daily transfer limit exceeded'),
+            });
+        });
+
+        it('rejects transfer when aggregate within serialized transaction exceeds monthly limit', async () => {
+            const sender = makeSenderAccount({ balance: new Prisma.Decimal('100000000.00') });
+            prismaMock.account.findFirst.mockResolvedValue(sender);
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+            prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+
+            // Pre-check outside tx sees daily: 100k, monthly: 49,000,000 (passes: 49M + 800k = 49.8M <= 50M)
+            // Inside tx, another concurrent transfer committed and raised monthly aggregate to 49,500,000
+            // Now 49,500,000 + 800,000 = 50,300,000 > 50,000,000 -> throws Monthly transfer limit exceeded
+            prismaMock.transaction.aggregate
+                .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('100000.00') } }) // outside tx daily precheck
+                .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('49000000.00') } }) // outside tx monthly precheck
+                .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('100000.00') } }) // inside tx daily check
+                .mockResolvedValueOnce({ _sum: { amount: new Prisma.Decimal('49500000.00') } }); // inside tx monthly check
+
+            await expect(
+                TransactionService.transferMoney('user-1', {
+                    fromAccountId: 'acc-sender',
+                    toAccountId: 'acc-receiver',
+                    amount: '800000.00',
+                    reference: 'ref-concurrent-monthly',
+                })
+            ).rejects.toMatchObject({
+                statusCode: 400,
+                message: expect.stringContaining('Monthly transfer limit exceeded'),
+            });
+        });
+
+        it('handles two simultaneous concurrent transfer requests near limit: first succeeds, second rejects', async () => {
+            const sender = makeSenderAccount({ balance: new Prisma.Decimal('10000000.00') });
+            prismaMock.account.findFirst.mockResolvedValue(sender);
+
+            let cumulativeCompleted = new Prisma.Decimal('4000000.00');
+
+            // Simulate real DB aggregate: reflects cumulative completed transfers
+            prismaMock.transaction.aggregate.mockImplementation(async () => ({
+                _sum: { amount: cumulativeCompleted },
+            }));
+
+            // Inside $transaction, simulate serialized execution
+            let runningInTx = false;
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => {
+                while (runningInTx) {
+                    await new Promise((r) => setTimeout(r, 10));
+                }
+                runningInTx = true;
+                try {
+                    const res = await fn(prismaMock);
+                    cumulativeCompleted = cumulativeCompleted.plus(new Prisma.Decimal('800000.00'));
+                    return res;
+                } finally {
+                    runningInTx = false;
+                }
+            });
+
+            prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+            prismaMock.account.findUnique.mockImplementation(async ({ where }: any) => {
+                if (where.id === 'acc-sender') {
+                    return sender;
+                }
+                return {
+                    id: 'acc-receiver',
+                    userId: 'user-2',
+                    accountNumber: '2222222222',
+                    type: 'CHECKING',
+                    status: 'ACTIVE',
+                    balance: new Prisma.Decimal('1000.00'),
+                    currency: 'INR',
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                };
+            });
+
+            prismaMock.transaction.create.mockImplementation(async (args: any) => ({
+                id: 'tx-' + Math.random(),
+                ...args.data,
+            }));
+
+            // Launch two simultaneous transfers of 800,000 each (cumulative is 4,000,000; limit is 5,000,000)
+            // Transfer 1: 4M + 800k = 4.8M <= 5M -> succeeds!
+            // Transfer 2: 4.8M + 800k = 5.6M > 5M -> rejected inside serialized tx!
+            const promise1 = TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId: 'acc-receiver',
+                amount: '800000.00',
+                reference: 'ref-race-1',
+            });
+            const promise2 = TransactionService.transferMoney('user-1', {
+                fromAccountId: 'acc-sender',
+                toAccountId: 'acc-receiver',
+                amount: '800000.00',
+                reference: 'ref-race-2',
+            });
+
+            const results = await Promise.allSettled([promise1, promise2]);
+            const fulfilled = results.filter((r) => r.status === 'fulfilled');
+            const rejected = results.filter((r) => r.status === 'rejected');
+
+            expect(fulfilled).toHaveLength(1);
+            expect(rejected).toHaveLength(1);
+
+            const rejectionReason: any = (rejected[0] as PromiseRejectedResult).reason;
+            expect(rejectionReason.statusCode).toBe(400);
+            expect(rejectionReason.message).toContain('Daily transfer limit exceeded');
+        });
+    });
+});

@@ -48,3 +48,9 @@ export const changePasswordSchema = z.object({
             .regex(/[0-9]/, 'Password must contain at least one number')
     })
 });
+
+export const oauthExchangeSchema = z.object({
+    body: z.object({
+        ticket: z.string().min(1, 'Ticket is required')
+    })
+});
