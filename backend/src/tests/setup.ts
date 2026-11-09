@@ -62,6 +62,13 @@ export const prismaMock = {
         create:     vi.fn(),
         findMany:   vi.fn(),
     },
+    oAuthAccount: {
+        findUnique: vi.fn(),
+        findFirst:  vi.fn(),
+        create:     vi.fn(),
+        update:     vi.fn(),
+        deleteMany: vi.fn(),
+    },
     $transaction: vi.fn(),
 };
 

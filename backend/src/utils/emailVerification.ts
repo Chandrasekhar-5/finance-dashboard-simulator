@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { AppError } from './AppError.js';
 import { env } from '../config/env.js';
 import { AuditLogger } from './auditLogger.js';
+import { EmailService } from '../services/email.service.js';
 
 
 export const EmailVerificationService = {
@@ -77,15 +78,19 @@ export const EmailVerificationService = {
         if (!user) return;
 
         if (user.emailVerified) throw new AppError('Email already verified', 400);
-        
-        else {
+
         const token = await this.generateVerificationToken(user.id);
 
         if (env.NODE_ENV === 'development') {
             console.log(`Email verification token: ${email}: ${token}`);
             console.log(`Verification link: http://localhost:5000/api/v1/auth/verify-email?token=${token}`);
         }
-    }
+
+        try {
+            await EmailService.sendVerificationEmail(email, token);
+        } catch (error: any) {
+            throw new AppError('Failed to send verification email, please try again', 500);
+        }
     },
 
     async isEmailVerified(userId: string): Promise<boolean> {

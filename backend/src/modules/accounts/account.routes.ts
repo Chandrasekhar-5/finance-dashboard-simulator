@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/requireAuth.js';
+import { requireEmailVerified } from '../../middleware/requireEmailVerification.js';
 import { AccountController } from './account.controller.js';
 
 const router = Router();
 
 
 router.use(requireAuth);
+router.use(requireEmailVerified);
 
 
 /**

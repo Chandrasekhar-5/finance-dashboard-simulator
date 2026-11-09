@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/requireAuth.js';
+import { requireEmailVerified } from '../../middleware/requireEmailVerification.js';
 import { TransactionController } from './transaction.controller.js';
 import { validate } from '../../middleware/validate.js';
 import { transferSchema, getTransactionsSchema } from './transaction.schema.js';
@@ -8,6 +9,7 @@ const router = Router();
 
 
 router.use(requireAuth);
+router.use(requireEmailVerified);
 
 
 /**
