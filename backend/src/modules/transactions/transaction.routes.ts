@@ -177,7 +177,7 @@ router.post('/transfer', validate(transferSchema), TransactionController.transfe
  *                 error:
  *                   type: string
  *                   example: Unauthorized
- *      404:
+ *       404:
  *         description: Account not found
  *         content:
  *           application/json:
@@ -190,7 +190,7 @@ router.post('/transfer', validate(transferSchema), TransactionController.transfe
  *                 error:
  *                   type: string
  *                   example: Account not found
- *      500:
+ *       500:
  *         description: Internal server error
  *         content:
  *           application/json:

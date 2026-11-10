@@ -110,7 +110,10 @@ export const AuthController = {
     async refresh(req: Request, res: Response) {
         const currentRefreshToken = req.cookies.refreshToken;
 
-        if (!currentRefreshToken) throw new AppError('Refresh token not found', 401);
+        if (!currentRefreshToken) {
+            res.status(401).json({ success: false, error: 'Refresh token not found' });
+            return;
+        }
 
         const deviceInfo = getDeviceInfo(req);
 
