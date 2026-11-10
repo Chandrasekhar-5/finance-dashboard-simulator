@@ -274,8 +274,8 @@ export const schemas = {
 
                         
                         amount: {
-                            type: 'number',
-                            example: 1000
+                            type: 'string',
+                            example: '1000.00'
                         },
 
                         type: {
@@ -335,8 +335,8 @@ export const schemas = {
                         },
 
                         amount: {
-                            type: 'number',
-                            example: 1000
+                            type: 'string',
+                            example: '1000.00'
                         },
 
                         type: {

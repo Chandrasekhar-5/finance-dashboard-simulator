@@ -15,9 +15,12 @@ const envSchema = z.object({
     EMAIL_FROM: z.string().default('noreply@chandrasekhar.xyz'),
     GOOGLE_CLIENT_ID: z.string(),
     GOOGLE_CLIENT_SECRET: z.string(),
-    GOOGLE_CALLBACK_URL: z.string().default('http://localhost:5000/api/v1/auth/google/callback')
+    GOOGLE_CALLBACK_URL: z.string().default('http://localhost:5000/api/v1/auth/google/callback'),
+    TRANSFER_MIN_AMOUNT: z.string().default('0.01'),
+    TRANSFER_MAX_AMOUNT: z.string().default('1000000'),
+    TRANSFER_DAILY_LIMIT: z.string().default('5000000'),
+    TRANSFER_MONTHLY_LIMIT: z.string().default('50000000'),
 });
-
 
 const _env = envSchema.safeParse(process.env);
 

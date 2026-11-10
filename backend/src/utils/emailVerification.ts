@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from './AppError.js';
 import { env } from '../config/env.js';
+import { AuditLogger } from './auditLogger.js';
+import { EmailService } from '../services/email.service.js';
 
 
 export const EmailVerificationService = {
@@ -31,7 +33,7 @@ export const EmailVerificationService = {
         return token;
     },
 
-    async verifyEmail(token: string): Promise<void> {
+    async verifyEmail(token: string, context?: { ipAddress?: string | null; userAgent?: string | null }): Promise<void> {
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
         const verifiedRecord = await prisma.emailVerification.findFirst({
@@ -57,6 +59,17 @@ export const EmailVerificationService = {
             where: { id: verifiedRecord.id },
             data: { usedAt: new Date() }
         });
+
+        await AuditLogger.log({
+            userId: verifiedRecord.userId,
+            action: 'EMAIL_VERIFIED',
+            resource: 'AUTH',
+            ipAddress: context?.ipAddress,
+            userAgent: context?.userAgent,
+            metadata: {
+                email: verifiedRecord.user.email,
+            },
+        });
     },
 
     async resendVerificationEmail(email: string): Promise<void> {
@@ -65,15 +78,19 @@ export const EmailVerificationService = {
         if (!user) return;
 
         if (user.emailVerified) throw new AppError('Email already verified', 400);
-        
-        else {
+
         const token = await this.generateVerificationToken(user.id);
 
         if (env.NODE_ENV === 'development') {
             console.log(`Email verification token: ${email}: ${token}`);
             console.log(`Verification link: http://localhost:5000/api/v1/auth/verify-email?token=${token}`);
         }
-    }
+
+        try {
+            await EmailService.sendVerificationEmail(email, token);
+        } catch (error: any) {
+            throw new AppError('Failed to send verification email, please try again', 500);
+        }
     },
 
     async isEmailVerified(userId: string): Promise<boolean> {

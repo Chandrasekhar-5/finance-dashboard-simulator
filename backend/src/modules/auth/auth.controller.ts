@@ -4,6 +4,7 @@ import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
 import { prisma } from '../../lib/prisma.js';
 import jwt from 'jsonwebtoken';
+import { extractRequestContext } from '../../utils/auditLogger.js';
 
 
 
@@ -30,7 +31,7 @@ const getDeviceInfo = (req: Request) => {
 
 export const AuthController = {
     async register(req: Request, res: Response) {
-        const { accessToken, refreshToken, userId } = await AuthService.register(req.body);
+        const { accessToken, refreshToken, userId } = await AuthService.register(req.body, extractRequestContext(req));
         setRefreshCookie(res, refreshToken);
         
         res.status(201).json({ success: true, data: { userId, accessToken } });
@@ -43,7 +44,7 @@ export const AuthController = {
             throw new AppError('Verification token is required', 400);
         }
 
-        await AuthService.verifyEmail(token);
+        await AuthService.verifyEmail(token, extractRequestContext(req));
 
         if (env.NODE_ENV === 'production') {
             res.redirect(`${env.FRONTEND_URL}/login?verified=true`);
@@ -66,7 +67,7 @@ export const AuthController = {
 
     async login(req: Request, res: Response) {
         const deviceInfo = getDeviceInfo(req);
-        const { accessToken, refreshToken, userId } = await AuthService.login(req.body, deviceInfo);
+        const { accessToken, refreshToken, userId } = await AuthService.login(req.body, deviceInfo, extractRequestContext(req));
         setRefreshCookie(res, refreshToken);
 
         res.status(200).json({ success: true, data: { userId, accessToken } });
@@ -95,7 +96,7 @@ export const AuthController = {
 
         if (!userId) throw new AppError('Unauthorized', 401);
 
-        await AuthService.logoutAllDevices(userId);
+        await AuthService.logoutAllDevices(userId, extractRequestContext(req));
 
         res.clearCookie('refreshToken', {
             httpOnly: true,
@@ -132,7 +133,7 @@ export const AuthController = {
 
     if (!sessionId || Array.isArray(sessionId)) throw new AppError("Invalid Session ID", 400);
     
-    await AuthService.revokeSession(sessionId, userId);
+    await AuthService.revokeSession(sessionId, userId, extractRequestContext(req));
     res.status(200).json({ success: true, message: 'Session revoked successfully' });
    },
 
@@ -159,7 +160,7 @@ export const AuthController = {
 
         if (newPassword.length < 8) throw new AppError('Password must be at least 8 characters', 400);
         
-        await AuthService.resetPassword(token, newPassword);
+        await AuthService.resetPassword(token, newPassword, extractRequestContext(req));
 
         res.status(200).json({ success: true, message: 'Password reset successfully. Please login with your new password.' });
     },
@@ -172,7 +173,7 @@ export const AuthController = {
 
         if (newPassword.length < 8) throw new AppError('Password must be at least 8 characters', 400);
 
-        await AuthService.changePassword(userId, currentPassword, newPassword);
+        await AuthService.changePassword(userId, currentPassword, newPassword, extractRequestContext(req));
 
         res.clearCookie('refreshToken', { path: '/api/v1/auth' });
 

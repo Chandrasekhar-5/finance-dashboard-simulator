@@ -23,6 +23,8 @@ model User {
   passwordResets     PasswordReset[]
   emailVerifications EmailVerification[]
   oauthAccounts      OAuthAccount[]
+  oauthTickets       OAuthTicket[]
+  auditLogs          AuditLog[]
 
   @@map("users")
 }
@@ -66,18 +68,22 @@ model Account {
 }
 
 model Transaction {
-  id            String            @id @default(uuid())
-  reference     String            @unique
-  amount        Decimal           @db.Decimal(19, 4)
-  type          TransactionType
-  status        TransactionStatus @default(PENDING)
-  description   String?
-  fromAccountId String?
-  toAccountId   String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  fromAccount   Account?          @relation("FromAccount", fields: [fromAccountId], references: [id])
-  toAccount     Account?          @relation("ToAccount", fields: [toAccountId], references: [id])
+  id                    String            @id @default(uuid())
+  reference             String            @unique
+  amount                Decimal           @db.Decimal(19, 4)
+  type                  TransactionType
+  status                TransactionStatus @default(PENDING)
+  description           String?
+  fromAccountId         String?
+  toAccountId           String?
+  senderBalanceBefore   Decimal?          @db.Decimal(19, 4)
+  senderBalanceAfter    Decimal?          @db.Decimal(19, 4)
+  receiverBalanceBefore Decimal?          @db.Decimal(19, 4)
+  receiverBalanceAfter  Decimal?          @db.Decimal(19, 4)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  fromAccount           Account?          @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccount             Account?          @relation("ToAccount", fields: [toAccountId], references: [id])
 
   @@index([fromAccountId])
   @@index([toAccountId])
@@ -148,6 +154,25 @@ model EmailVerification {
   @@map("email_verifications")
 }
 
+model OAuthTicket {
+  id         String    @id @default(uuid())
+  userId     String
+  ticketHash String    @unique
+  deviceId   String?
+  deviceName String?
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+  usedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_tickets")
+}
+
 enum AccountType {
   CHECKING
   SAVINGS
@@ -171,4 +196,34 @@ enum TransactionStatus {
   COMPLETED
   FAILED
   REVERSED
+}
+
+enum AuditAction {
+  LOGIN
+  PASSWORD_CHANGED
+  TRANSFER
+  DEPOSIT
+  WITHDRAWAL
+  ACCOUNT_CREATED
+  SESSION_REVOKED
+  EMAIL_VERIFIED
+}
+
+model AuditLog {
+  id        String      @id @default(uuid())
+  userId    String?
+  action    AuditAction
+  resource  String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
