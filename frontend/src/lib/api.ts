@@ -28,6 +28,7 @@ export const api = {
   me: () => request<User>('/auth/me'),
   exchangeOAuthTicket: (ticket: string) => request<TokenPayload>('/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ ticket }) }),
   accounts: () => request<Account[]>('/accounts'),
+  account: (accountId: string) => request<Account>(`/accounts/${accountId}`),
   transactionHistory: (accountId: string) => request<Transaction[]>(`/transactions/history?${new URLSearchParams({ accountId, limit: '8' })}`),
   transactionHistoryPage: (accountId: string, params: { cursor?: string; direction?: 'INCOMING' | 'OUTGOING' }) => {
     const sp = new URLSearchParams({ accountId, limit: String(PAGE_SIZE) })

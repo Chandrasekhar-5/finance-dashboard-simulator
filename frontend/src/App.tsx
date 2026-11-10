@@ -5,6 +5,7 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { OAuthCallbackPage } from '@/features/auth/OAuthCallbackPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { AccountsPage } from '@/features/accounts/AccountsPage'
 import { ActivityPage } from '@/features/activity/ActivityPage'
 import { TransferPage } from '@/features/transfer/TransferPage'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
@@ -57,6 +58,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/accounts" element={<AccountsPage />} />
               <Route path="/transfer" element={<TransferPage />} />
               <Route path="/activity" element={<ActivityPage />} />
             </Route>
