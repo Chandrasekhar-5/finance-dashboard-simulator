@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeftRight,
@@ -52,6 +53,7 @@ function friendlyError(err: unknown): string {
 }
 
 export function TransferPage() {
+  const navigate = useNavigate()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [accountError, setAccountError] = useState('')
@@ -66,20 +68,23 @@ export function TransferPage() {
   const referenceRef = useRef<string>(crypto.randomUUID())
   const lastSubmittedRef = useRef<FormState | null>(null)
 
+  const loadAccounts = useCallback(async () => {
+    const items = await api.accounts()
+    setAccounts(Array.isArray(items) ? items : [])
+    return items
+  }, [])
+
   useEffect(() => {
-    api
-      .accounts()
+    loadAccounts()
       .then(items => {
-        const safe = Array.isArray(items) ? items : []
-        setAccounts(safe)
-        const active = safe.filter(a => a.status === 'ACTIVE')
+        const active = (Array.isArray(items) ? items : []).filter(a => a.status === 'ACTIVE')
         if (active.length > 0) {
           setForm(f => ({ ...f, fromAccountId: active[0].id }))
         }
       })
       .catch(cause => setAccountError(cause instanceof Error ? cause.message : 'Unable to load accounts'))
       .finally(() => setLoadingAccounts(false))
-  }, [])
+  }, [loadAccounts])
 
   const activeAccounts = useMemo(() => accounts.filter(a => a.status === 'ACTIVE'), [accounts])
 
@@ -180,6 +185,9 @@ export function TransferPage() {
       const data = await api.transfer(payload)
       setResult(data)
       setStage('success')
+      // Refresh account balances so the UI reflects the debit. Best-effort —
+      // the receipt is already confirmed by the backend response above.
+      loadAccounts().catch(() => {})
     } catch (err) {
       const message = friendlyError(err)
       setSubmitError(message)
@@ -286,7 +294,7 @@ export function TransferPage() {
             <Button variant="default" onClick={resetForNewTransfer} className="flex-1">
               <ArrowLeftRight size={16} /> New transfer
             </Button>
-            <Button variant="outline" onClick={() => { window.location.href = '/activity' }} className="flex-1">
+            <Button variant="outline" onClick={() => navigate('/activity')} className="flex-1">
               View activity
             </Button>
           </div>
