@@ -83,10 +83,16 @@ export function AccountsPage() {
       .finally(() => setDetailLoading(false))
   }, [selectedId])
 
-  const totalBalance = useMemo(
-    () => accounts.filter(a => a.status === 'ACTIVE').reduce((sum, a) => sum + Number(a.balance), 0),
-    [accounts],
-  )
+  // Group active balances by currency so different currencies are never
+  // added together into one misleading total.
+  const totalsByCurrency = useMemo(() => {
+    const groups = new Map<string, number>()
+    for (const a of accounts) {
+      if (a.status !== 'ACTIVE') continue
+      groups.set(a.currency, (groups.get(a.currency) ?? 0) + Number(a.balance))
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [accounts])
 
   const activeCount = useMemo(() => accounts.filter(a => a.status === 'ACTIVE').length, [accounts])
   const inactiveCount = useMemo(() => accounts.filter(a => a.status === 'INACTIVE').length, [accounts])
@@ -138,9 +144,18 @@ export function AccountsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="bg-[#252923] p-6 text-[#f8f6f0] md:col-span-2">
           <p className="text-[13px] text-[#b8bcb1]">Total balance (active)</p>
-          <p className="mt-2 font-display text-[32px] font-extrabold tracking-[-.04em]">
-            {showBalances ? formatMoney(totalBalance, accounts[0]?.currency ?? 'INR') : '\u20B9 \u2022\u2022\u2022\u2022\u2022\u2022'}
-          </p>
+          {totalsByCurrency.length === 0 ? (
+            <p className="mt-2 font-display text-[32px] font-extrabold tracking-[-.04em]">{showBalances ? formatMoney(0, 'INR') : '\u2022\u2022\u2022\u2022\u2022\u2022'}</p>
+          ) : (
+            <div className="mt-2 space-y-1.5">
+              {totalsByCurrency.map(([currency, total]) => (
+                <p key={currency} className="font-display text-[32px] font-extrabold leading-tight tracking-[-.04em]">
+                  {showBalances ? formatMoney(total, currency) : '\u2022\u2022\u2022\u2022\u2022\u2022'}
+                  {totalsByCurrency.length > 1 && <span className="ml-2 text-[14px] font-semibold text-[#b8bcb1]">{currency}</span>}
+                </p>
+              ))}
+            </div>
+          )}
           <p className="mt-3 text-[13px] text-[#8b8e83]">
             Across {activeCount} active account{activeCount !== 1 ? 's' : ''}
           </p>
@@ -239,6 +254,7 @@ export function AccountsPage() {
 function AccountDetail({ account, showBalance, onTransfer }: { account: Account; showBalance: boolean; onTransfer: () => void }) {
   const meta = STATUS_META[account.status]
   const isActive = account.status === 'ACTIVE'
+  const [revealNumber, setRevealNumber] = useState(false)
 
   return (
     <Card className="border-[#e7e3d9] bg-[#fbfaf6] p-6">
@@ -272,7 +288,22 @@ function AccountDetail({ account, showBalance, onTransfer }: { account: Account;
       </div>
 
       <dl className="mt-5 space-y-1">
-        <DetailRow label="Account number" value={account.accountNumber} />
+        <div className="flex items-center justify-between gap-4 border-b border-[#eeebe2] py-3">
+          <dt className="text-[13px] text-[#77796f]">Account number</dt>
+          <dd className="flex items-center gap-2 text-right">
+            <span className="font-mono text-[13px] font-semibold text-[#252923]">
+              {revealNumber ? account.accountNumber : maskAccountNumber(account.accountNumber)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setRevealNumber(r => !r)}
+              className="grid size-7 place-items-center rounded-lg text-[#77796f] transition hover:bg-[#eeebe2]"
+              aria-label={revealNumber ? 'Hide account number' : 'Show account number'}
+            >
+              {revealNumber ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </dd>
+        </div>
         <DetailRow label="Currency" value={account.currency} />
         <DetailRow label="Type" value={ACCOUNT_TYPE_LABEL[account.type]} />
         <DetailRow label="Status" value={meta.label} />
