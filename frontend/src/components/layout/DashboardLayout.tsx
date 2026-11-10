@@ -19,7 +19,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 const navigation = [
   { label: 'Overview', to: '/dashboard', icon: LayoutDashboard, end: true },
   { label: 'Accounts', to: '/dashboard#accounts', icon: CreditCard },
-  { label: 'Activity', to: '/dashboard#activity', icon: ArrowLeftRight },
+  { label: 'Activity', to: '/activity', icon: ArrowLeftRight },
 ]
 
 export function DashboardLayout() {
