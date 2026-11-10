@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
   CheckCircle2,
+  Eye,
+  EyeOff,
   Globe,
+  KeyRound,
   Laptop,
   LogOut,
   Monitor,
@@ -17,6 +20,7 @@ import {
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { api, authToken } from '@/lib/api'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -167,6 +171,15 @@ export function SecurityPage() {
           </button>
         </div>
       )}
+
+      {/* Change password */}
+      <ChangePasswordForm
+        onSuccess={async () => {
+          authToken.set(null)
+          await logout()
+          navigate('/login', { replace: true })
+        }}
+      />
 
       {/* Logout all devices */}
       <Card className="mb-6 border-[#e7e3d9] bg-[#fbfaf6] p-6">
@@ -334,6 +347,175 @@ function ConfirmDialog({
           </Button>
         </div>
       </Card>
+    </div>
+  )
+}
+
+function ChangePasswordForm({ onSuccess }: { onSuccess: () => Promise<void> }) {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showCurrent, setShowCurrent] = useState(false)
+  const [showNew, setShowNew] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [submitError, setSubmitError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  function validate(): boolean {
+    const errors: Record<string, string> = {}
+
+    if (currentPassword.length < 8)
+      errors.currentPassword = 'Current password must be at least 8 characters.'
+
+    if (newPassword.length < 8)
+      errors.newPassword = 'New password must be at least 8 characters.'
+    else if (!/[A-Z]/.test(newPassword))
+      errors.newPassword = 'New password must contain at least one uppercase letter.'
+    else if (!/[0-9]/.test(newPassword))
+      errors.newPassword = 'New password must contain at least one number.'
+    else if (newPassword === currentPassword)
+      errors.newPassword = 'New password must be different from your current password.'
+
+    if (confirmPassword !== newPassword)
+      errors.confirmPassword = 'Passwords do not match.'
+
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSubmitError('')
+
+    if (!validate()) return
+
+    setSubmitting(true)
+    try {
+      await api.changePassword(currentPassword, newPassword)
+      // Backend invalidates all sessions and clears the refresh cookie.
+      // Clear local auth state and redirect to login.
+      await onSuccess()
+    } catch (cause) {
+      setSubmitError(cause instanceof Error ? cause.message : 'Unable to change password. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Card className="mb-6 border-[#e7e3d9] bg-[#fbfaf6] p-6">
+      <div className="flex items-start gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#eceee3] text-[#4a5240]">
+          <KeyRound size={20} />
+        </span>
+        <div>
+          <h2 className="text-[15px] font-bold text-[#252923]">Change password</h2>
+          <p className="mt-1 text-[13px] text-[#77796f]">
+            After changing your password, you will be signed out from all devices and need to log in again.
+          </p>
+        </div>
+      </div>
+
+      {submitError && (
+        <div className="mt-4 flex items-center gap-3 rounded-xl bg-[#f3e4de] p-3.5 text-[13px] font-medium text-[#8a3f25]">
+          <AlertCircle size={16} className="shrink-0" />
+          <p className="flex-1">{submitError}</p>
+          <button onClick={() => setSubmitError('')} className="shrink-0 rounded-lg p-1 hover:bg-[#e8d5cf]" aria-label="Dismiss">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="mt-5 space-y-4" noValidate>
+        <PasswordField
+          id="currentPassword"
+          label="Current password"
+          value={currentPassword}
+          onChange={v => { setCurrentPassword(v); setValidationErrors(prev => ({ ...prev, currentPassword: '' })) }}
+          show={showCurrent}
+          onToggle={() => setShowCurrent(s => !s)}
+          error={validationErrors.currentPassword}
+          autoComplete="current-password"
+        />
+        <PasswordField
+          id="newPassword"
+          label="New password"
+          value={newPassword}
+          onChange={v => { setNewPassword(v); setValidationErrors(prev => ({ ...prev, newPassword: '', confirmPassword: '' })) }}
+          show={showNew}
+          onToggle={() => setShowNew(s => !s)}
+          error={validationErrors.newPassword}
+          autoComplete="new-password"
+          hint="At least 8 characters with one uppercase letter and one number."
+        />
+        <PasswordField
+          id="confirmPassword"
+          label="Confirm new password"
+          value={confirmPassword}
+          onChange={v => { setConfirmPassword(v); setValidationErrors(prev => ({ ...prev, confirmPassword: '' })) }}
+          show={showConfirm}
+          onToggle={() => setShowConfirm(s => !s)}
+          error={validationErrors.confirmPassword}
+          autoComplete="new-password"
+        />
+
+        <Button type="submit" disabled={submitting} className="w-full sm:w-auto">
+          {submitting ? 'Changing password…' : 'Change password'}
+        </Button>
+      </form>
+    </Card>
+  )
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  show,
+  onToggle,
+  error,
+  autoComplete,
+  hint,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+  show: boolean
+  onToggle: () => void
+  error?: string
+  autoComplete: string
+  hint?: string
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-1.5 block text-[13px] font-semibold text-[#252923]">{label}</label>
+      <div className="relative">
+        <Input
+          id={id}
+          type={show ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          className={cn('pr-10', error && 'border-[#c9b8b0] focus:border-[#c9b8b0] focus:ring-[#8a3f25]/15')}
+          aria-invalid={!!error}
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          className="absolute right-2 top-1/2 -translate-y-1/2 grid size-7 place-items-center rounded-lg text-[#77796f] transition hover:bg-[#eeebe2]"
+          aria-label={show ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+        >
+          {show ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+      </div>
+      {error ? (
+        <p className="mt-1.5 text-[12px] font-medium text-[#8a3f25]">{error}</p>
+      ) : hint ? (
+        <p className="mt-1.5 text-[12px] text-[#9a9b91]">{hint}</p>
+      ) : null}
     </div>
   )
 }

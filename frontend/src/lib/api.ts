@@ -46,4 +46,9 @@ export const api = {
   revokeSession: (sessionId: string) =>
     request<unknown>(`/auth/sessions/${sessionId}`, { method: 'DELETE' }),
   logoutAll: () => request<unknown>('/auth/logout-all', { method: 'POST' }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<unknown>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
 }
