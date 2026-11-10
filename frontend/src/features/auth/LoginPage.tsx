@@ -74,6 +74,12 @@ export function LoginPage() {
             <Input className="mt-1.5 border-[#e0dccf] bg-[#fbfaf6] focus:border-[#a7654b] focus:ring-[#a7654b]/15" name="password" type="password" autoComplete="current-password" required />
           </label>
 
+          <div className="mt-2.5 text-right">
+            <Link className="text-[12px] font-medium text-[#a7654b] hover:text-[#8a503b]" to="/forgot-password">
+              Forgot password?
+            </Link>
+          </div>
+
           <Button className="mt-7 w-full bg-[#252923] text-[#f8f6f0] hover:bg-[#394235]" disabled={busy}>
             {busy ? 'Signing in…' : 'Sign in'}
           </Button>
