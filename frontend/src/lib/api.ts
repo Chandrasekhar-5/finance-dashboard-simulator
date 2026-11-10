@@ -2,6 +2,7 @@ import type {
   Account,
   ApiEnvelope,
   ApiErrorBody,
+  Session,
   TokenPayload,
   User,
   Transaction,
@@ -41,4 +42,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  sessions: () => request<Session[]>('/auth/sessions'),
+  revokeSession: (sessionId: string) =>
+    request<unknown>(`/auth/sessions/${sessionId}`, { method: 'DELETE' }),
+  logoutAll: () => request<unknown>('/auth/logout-all', { method: 'POST' }),
 }

@@ -8,6 +8,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { AccountsPage } from '@/features/accounts/AccountsPage'
 import { ActivityPage } from '@/features/activity/ActivityPage'
 import { TransferPage } from '@/features/transfer/TransferPage'
+import { SecurityPage } from '@/features/security/SecurityPage'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 
 interface AppErrorBoundaryProps { children: ReactNode }
@@ -61,6 +62,7 @@ export default function App() {
               <Route path="/accounts" element={<AccountsPage />} />
               <Route path="/transfer" element={<TransferPage />} />
               <Route path="/activity" element={<ActivityPage />} />
+              <Route path="/security" element={<SecurityPage />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

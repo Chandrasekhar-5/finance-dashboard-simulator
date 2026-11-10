@@ -28,3 +28,12 @@ export interface TransferRequest {
   reference: string
 }
 export interface ApiErrorBody { success: false; error?: string; message?: string }
+export interface Session {
+  id: string
+  deviceId: string | null
+  deviceName: string | null
+  ipAddress: string | null
+  UserAgent: string | null
+  createdAt: string
+  expiresAt: string
+}

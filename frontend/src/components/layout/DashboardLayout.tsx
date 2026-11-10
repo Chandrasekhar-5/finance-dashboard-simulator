@@ -67,9 +67,13 @@ export function DashboardLayout() {
 
         <div className="mt-10 px-3 text-[10px] font-bold uppercase tracking-[.18em] text-[#9a9b91]">Personal</div>
         <div className="mt-3 space-y-1">
-          <div className="flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] font-medium text-[#a2a399]" title="Coming soon">
-            <ShieldCheck size={17} strokeWidth={1.8} /> Security <span className="ml-auto text-[9px] uppercase tracking-wider">Soon</span>
-          </div>
+          <NavLink
+            to="/security"
+            onClick={() => setMobileOpen(false)}
+            className={({ isActive }) => `group flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] font-semibold transition-colors ${isActive ? 'bg-[#e9e6dc] text-[#252923]' : 'text-[#77796f] hover:bg-[#efede5] hover:text-[#252923]'}`}
+          >
+            <ShieldCheck size={17} strokeWidth={1.8} /> Security
+          </NavLink>
           <div className="flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] font-medium text-[#a2a399]" title="Coming soon">
             <Settings2 size={17} strokeWidth={1.8} /> Preferences <span className="ml-auto text-[9px] uppercase tracking-wider">Soon</span>
           </div>
