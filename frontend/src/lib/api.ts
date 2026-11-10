@@ -5,7 +5,9 @@ import type {
   TokenPayload,
   User,
   Transaction,
-  TransactionHistoryResponse
+  TransactionHistoryResponse,
+  TransferRequest,
+  TransferResult
 } from '@/types/api'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5000/api/v1'
@@ -33,4 +35,9 @@ export const api = {
     if (params.direction) sp.set('direction', params.direction)
     return request<TransactionHistoryResponse>(`/transactions/history?${sp}`)
   },
+  transfer: (payload: TransferRequest) =>
+    request<TransferResult>('/transactions/transfer', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 }

@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Send,
   Settings2,
   ShieldCheck,
   X,
@@ -19,6 +20,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 const navigation = [
   { label: 'Overview', to: '/dashboard', icon: LayoutDashboard, end: true },
   { label: 'Accounts', to: '/dashboard#accounts', icon: CreditCard },
+  { label: 'Transfer', to: '/transfer', icon: Send },
   { label: 'Activity', to: '/activity', icon: ArrowLeftRight },
 ]
 
