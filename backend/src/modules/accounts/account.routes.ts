@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { requireAuth } from '../../middleware/requireAuth.js';
 import { requireEmailVerified } from '../../middleware/requireEmailVerification.js';
 import { AccountController } from './account.controller.js';
+import { validate } from '../../middleware/validate.js';
+import { accountByIdSchema } from './account.schema.js';
 
 const router = Router();
 
@@ -97,7 +99,7 @@ router.get('/', AccountController.getMyAccounts);
  *             schema:
  *               $ref: '#/components/schemas/InternalServerError'
  */
-router.get('/:accountId', AccountController.getAccountDetails);
+router.get('/:accountId', validate(accountByIdSchema), AccountController.getAccountDetails);
 
 
 export default router;

@@ -445,5 +445,199 @@ describe('AuditLogger Unit Tests (Phase 5)', () => {
             // No audit log should be emitted for TRANSFER
             expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
         });
+
+        // -----------------------------------------------------------------------
+        // MED-05: DEPOSIT audit log tests
+        // -----------------------------------------------------------------------
+
+        it('emits DEPOSIT audit record on successful depositMoney', async () => {
+            const account = {
+                id: 'acc-deposit',
+                userId: 'user-deposit',
+                accountNumber: '3333333333',
+                type: 'CHECKING',
+                status: 'ACTIVE',
+                balance: new Prisma.Decimal('500.00'),
+                currency: 'INR',
+            };
+            const depositRecord = {
+                id: 'tx-deposit-1',
+                reference: 'ref-deposit-audit',
+                amount: new Prisma.Decimal('200.00'),
+                type: 'DEPOSIT',
+                status: 'COMPLETED',
+                toAccountId: 'acc-deposit',
+                createdAt: new Date(),
+            };
+
+            prismaMock.account.findFirst.mockResolvedValue(account as any);
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+            prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+            prismaMock.account.findUnique.mockResolvedValue({
+                ...account,
+                balance: new Prisma.Decimal('700.00'),
+            } as any);
+            prismaMock.transaction.create.mockResolvedValue(depositRecord as any);
+            prismaMock.auditLog.create.mockResolvedValue({} as any);
+
+            await TransactionService.depositMoney('user-deposit', {
+                accountId: 'acc-deposit',
+                amount: '200.00',
+                reference: 'ref-deposit-audit',
+            });
+
+            expect(prismaMock.auditLog.create).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    userId: 'user-deposit',
+                    action: 'DEPOSIT',
+                    resource: 'TRANSACTION',
+                    metadata: {
+                        transactionId: 'tx-deposit-1',
+                        reference: 'ref-deposit-audit',
+                        accountId: 'acc-deposit',
+                        amount: '200',
+                        status: 'COMPLETED',
+                    },
+                }),
+            });
+        });
+
+        it('does NOT roll back a successful deposit when the DEPOSIT audit log fails', async () => {
+            const account = {
+                id: 'acc-deposit-2',
+                userId: 'user-deposit-2',
+                accountNumber: '4444444444',
+                type: 'CHECKING',
+                status: 'ACTIVE',
+                balance: new Prisma.Decimal('1000.00'),
+                currency: 'INR',
+            };
+            const depositRecord = {
+                id: 'tx-deposit-2',
+                reference: 'ref-deposit-nofail',
+                amount: new Prisma.Decimal('100.00'),
+                type: 'DEPOSIT',
+                status: 'COMPLETED',
+                toAccountId: 'acc-deposit-2',
+                createdAt: new Date(),
+            };
+
+            prismaMock.account.findFirst.mockResolvedValue(account as any);
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+            prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+            prismaMock.account.findUnique.mockResolvedValue({
+                ...account,
+                balance: new Prisma.Decimal('1100.00'),
+            } as any);
+            prismaMock.transaction.create.mockResolvedValue(depositRecord as any);
+            // Simulate audit failure
+            prismaMock.auditLog.create.mockRejectedValue(new Error('Audit DB error'));
+
+            // Should resolve successfully despite audit failure
+            await expect(
+                TransactionService.depositMoney('user-deposit-2', {
+                    accountId: 'acc-deposit-2',
+                    amount: '100.00',
+                    reference: 'ref-deposit-nofail',
+                })
+            ).resolves.toBeDefined();
+        });
+
+        // -----------------------------------------------------------------------
+        // MED-05: WITHDRAWAL audit log tests
+        // -----------------------------------------------------------------------
+
+        it('emits WITHDRAWAL audit record on successful withdrawMoney', async () => {
+            const account = {
+                id: 'acc-withdraw',
+                userId: 'user-withdraw',
+                accountNumber: '5555555555',
+                type: 'CHECKING',
+                status: 'ACTIVE',
+                balance: new Prisma.Decimal('1000.00'),
+                currency: 'INR',
+            };
+            const withdrawRecord = {
+                id: 'tx-withdraw-1',
+                reference: 'ref-withdraw-audit',
+                amount: new Prisma.Decimal('300.00'),
+                type: 'WITHDRAWAL',
+                status: 'COMPLETED',
+                fromAccountId: 'acc-withdraw',
+                createdAt: new Date(),
+            };
+
+            prismaMock.account.findFirst.mockResolvedValue(account as any);
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+            prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+            prismaMock.account.findUnique.mockResolvedValue({
+                ...account,
+                balance: new Prisma.Decimal('700.00'),
+            } as any);
+            prismaMock.transaction.create.mockResolvedValue(withdrawRecord as any);
+            prismaMock.auditLog.create.mockResolvedValue({} as any);
+
+            await TransactionService.withdrawMoney('user-withdraw', {
+                accountId: 'acc-withdraw',
+                amount: '300.00',
+                reference: 'ref-withdraw-audit',
+            });
+
+            expect(prismaMock.auditLog.create).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    userId: 'user-withdraw',
+                    action: 'WITHDRAWAL',
+                    resource: 'TRANSACTION',
+                    metadata: {
+                        transactionId: 'tx-withdraw-1',
+                        reference: 'ref-withdraw-audit',
+                        accountId: 'acc-withdraw',
+                        amount: '300',
+                        status: 'COMPLETED',
+                    },
+                }),
+            });
+        });
+
+        it('does NOT roll back a successful withdrawal when the WITHDRAWAL audit log fails', async () => {
+            const account = {
+                id: 'acc-withdraw-2',
+                userId: 'user-withdraw-2',
+                accountNumber: '6666666666',
+                type: 'CHECKING',
+                status: 'ACTIVE',
+                balance: new Prisma.Decimal('500.00'),
+                currency: 'INR',
+            };
+            const withdrawRecord = {
+                id: 'tx-withdraw-2',
+                reference: 'ref-withdraw-nofail',
+                amount: new Prisma.Decimal('50.00'),
+                type: 'WITHDRAWAL',
+                status: 'COMPLETED',
+                fromAccountId: 'acc-withdraw-2',
+                createdAt: new Date(),
+            };
+
+            prismaMock.account.findFirst.mockResolvedValue(account as any);
+            prismaMock.$transaction.mockImplementation(async (fn: Function) => fn(prismaMock));
+            prismaMock.account.updateMany.mockResolvedValue({ count: 1 });
+            prismaMock.account.findUnique.mockResolvedValue({
+                ...account,
+                balance: new Prisma.Decimal('450.00'),
+            } as any);
+            prismaMock.transaction.create.mockResolvedValue(withdrawRecord as any);
+            // Simulate audit failure
+            prismaMock.auditLog.create.mockRejectedValue(new Error('Audit DB error'));
+
+            // Should resolve successfully despite audit failure
+            await expect(
+                TransactionService.withdrawMoney('user-withdraw-2', {
+                    accountId: 'acc-withdraw-2',
+                    amount: '50.00',
+                    reference: 'ref-withdraw-nofail',
+                })
+            ).resolves.toBeDefined();
+        });
     });
 });

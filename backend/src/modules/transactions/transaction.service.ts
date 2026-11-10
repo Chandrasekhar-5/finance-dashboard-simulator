@@ -54,14 +54,18 @@ export const TransactionService = {
         // toAccountNumber is the canonical new API field.
         // toAccountId is kept for backward compatibility with existing internal callers.
         // All downstream logic operates on resolvedToAccountId (UUID) exclusively.
+        // MED-03: When toAccountNumber is used, the resolved account is kept as
+        // prefetchedReceiverAccount to eliminate the redundant findUnique later.
         // ---------------------------------------------------------------------------
         let resolvedToAccountId: string;
+        let prefetchedReceiverAccount: Awaited<ReturnType<typeof prisma.account.findUnique>> | null = null;
         if (toAccountNumber !== undefined) {
             const resolvedAccount = await prisma.account.findUnique({
                 where: { accountNumber: toAccountNumber }
             });
             if (!resolvedAccount) throw new AppError('Receiver account not found', 404);
             resolvedToAccountId = resolvedAccount.id;
+            prefetchedReceiverAccount = resolvedAccount; // MED-03: reuse to skip second fetch
         } else if (data.toAccountId !== undefined) {
             resolvedToAccountId = data.toAccountId;
         } else {
@@ -93,7 +97,9 @@ export const TransactionService = {
             throw new AppError(`Sender account is ${senderAccount.status.toLowerCase()}`, 400);
         }
 
-        const receiverAccount = await prisma.account.findUnique({
+        // MED-03: Reuse prefetchedReceiverAccount if available (toAccountNumber path),
+        // otherwise fetch receiver by resolved UUID (toAccountId path).
+        const receiverAccount = prefetchedReceiverAccount ?? await prisma.account.findUnique({
             where: { id: resolvedToAccountId }
         });
 
@@ -336,6 +342,24 @@ export const TransactionService = {
                 return record;
             });
 
+            // MED-05: Audit successful deposit — best-effort, must not roll back the financial operation.
+            try {
+                await AuditLogger.log({
+                    userId,
+                    action: 'DEPOSIT',
+                    resource: 'TRANSACTION',
+                    metadata: {
+                        transactionId: transactionRecord.id,
+                        reference: transactionRecord.reference,
+                        accountId,
+                        amount: decimalAmount.toString(),
+                        status: 'COMPLETED',
+                    },
+                });
+            } catch {
+                // Best-effort: audit failure must never roll back a successful deposit.
+            }
+
             return transactionRecord;
         } catch (error: any) {
             if (error.code === 'P2002' && error.meta?.target?.includes('reference')) {
@@ -428,6 +452,24 @@ export const TransactionService = {
 
                 return record;
             });
+
+            // MED-05: Audit successful withdrawal — best-effort, must not roll back the financial operation.
+            try {
+                await AuditLogger.log({
+                    userId,
+                    action: 'WITHDRAWAL',
+                    resource: 'TRANSACTION',
+                    metadata: {
+                        transactionId: transactionRecord.id,
+                        reference: transactionRecord.reference,
+                        accountId,
+                        amount: decimalAmount.toString(),
+                        status: 'COMPLETED',
+                    },
+                });
+            } catch {
+                // Best-effort: audit failure must never roll back a successful withdrawal.
+            }
 
             return transactionRecord;
         } catch (error: any) {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { prismaMock } from '../setup.js';
 import { AccountService } from '../../modules/accounts/account.service.js';
 import { AppError } from '../../utils/AppError.js';
+import { accountByIdSchema } from '../../modules/accounts/account.schema.js';
 
 // ---------------------------------------------------------------------------
 // AccountService — smoke tests (Phase 0)
@@ -67,13 +68,64 @@ describe('AccountService.getAccountById', () => {
         );
     });
 
-    it('throws AppError(400) when account is not found or not owned', async () => {
+    it('throws AppError(404) when account is not found or not owned', async () => {
         prismaMock.account.findFirst.mockResolvedValue(null);
 
         await expect(AccountService.getAccountById('user-1', 'acc-other'))
             .rejects.toThrow(AppError);
 
         await expect(AccountService.getAccountById('user-1', 'acc-other'))
-            .rejects.toMatchObject({ statusCode: 400 });
+            .rejects.toMatchObject({ statusCode: 404 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// MED-04: accountByIdSchema — Zod UUID validation for GET /accounts/:accountId
+// ---------------------------------------------------------------------------
+
+describe('accountByIdSchema (MED-04)', () => {
+    it('accepts a valid UUID as accountId', () => {
+        const result = accountByIdSchema.safeParse({
+            params: { accountId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' },
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects a non-UUID accountId string', () => {
+        const result = accountByIdSchema.safeParse({
+            params: { accountId: 'not-a-uuid' },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues[0].message).toMatch(/valid UUID/i);
+        }
+    });
+
+    it('rejects an empty accountId', () => {
+        const result = accountByIdSchema.safeParse({
+            params: { accountId: '' },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects a numeric accountId', () => {
+        const result = accountByIdSchema.safeParse({
+            params: { accountId: '12345' },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects when accountId param is missing', () => {
+        const result = accountByIdSchema.safeParse({
+            params: {},
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('accepts lowercase UUID', () => {
+        const result = accountByIdSchema.safeParse({
+            params: { accountId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' },
+        });
+        expect(result.success).toBe(true);
     });
 });

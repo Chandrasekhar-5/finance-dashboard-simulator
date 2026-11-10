@@ -50,6 +50,18 @@ export const handleGoogleAuth = async (
                 }),
             ]);
 
+            // MED-05: Audit login for existing OAuth users (best-effort).
+            try {
+                await AuditLogger.log({
+                    userId: oauthAccount.user.id,
+                    action: 'LOGIN',
+                    resource: 'AUTH',
+                    metadata: { email, provider: 'google' },
+                });
+            } catch {
+                // Best-effort: audit failure must not block login.
+            }
+
             return done(null, oauthAccount.user);
         }
 
@@ -70,6 +82,19 @@ export const handleGoogleAuth = async (
                     avatar: profile.photos?.[0]?.value ?? null,
                 },
             });
+
+            // MED-05: Audit login for existing email-linked user connecting via Google (best-effort).
+            try {
+                await AuditLogger.log({
+                    userId: existingUser.id,
+                    action: 'LOGIN',
+                    resource: 'AUTH',
+                    metadata: { email, provider: 'google' },
+                });
+            } catch {
+                // Best-effort: audit failure must not block login.
+            }
+
             return done(null, existingUser);
         }
 

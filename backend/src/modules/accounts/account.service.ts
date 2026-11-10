@@ -15,7 +15,7 @@ export const AccountService = {
         const account = await prisma.account.findFirst({
             where: { id: accountId, userId }
         });
-        if (!account) throw new AppError('Account not found', 400);
+        if (!account) throw new AppError('Account not found', 404);
 
         return account;
     }
