@@ -1,7 +1,108 @@
 import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Landmark } from 'lucide-react'
 import { useAuth } from './AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-export function RegisterPage() { const { register } = useAuth(); const navigate = useNavigate(); const [error, setError] = useState(''); const [created, setCreated] = useState(false); const [busy, setBusy] = useState(false); async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const form = new FormData(event.currentTarget); setBusy(true); setError(''); try { await register(String(form.get('firstName')), String(form.get('lastName')), String(form.get('email')), String(form.get('password'))); setCreated(true) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to create account') } finally { setBusy(false) } }; if (created) return <main className="grid min-h-screen place-items-center p-4"><section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm"><h1 className="text-lg font-bold">Check your email</h1><p className="mt-2 text-sm text-muted">Your account is created. Verify your email before signing in.</p><Button className="mt-6" onClick={() => navigate('/login')}>Go to sign in</Button></section></main>; return <main className="grid min-h-screen place-items-center p-4"><form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"><div className="mb-7 flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-blue-50 text-brand"><Landmark size={21} /></div><div><h1 className="text-lg font-bold">Open your account</h1><p className="text-sm text-muted">Your checking account starts with ₹1,000.</p></div></div>{error && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}<div className="mb-4 grid grid-cols-2 gap-3"><label className="text-sm font-medium">First name<Input className="mt-1.5" name="firstName" required /></label><label className="text-sm font-medium">Last name<Input className="mt-1.5" name="lastName" required /></label></div><label className="mb-4 block text-sm font-medium">Email<Input className="mt-1.5" name="email" type="email" required /></label><label className="mb-6 block text-sm font-medium">Password<Input className="mt-1.5" name="password" type="password" minLength={8} required /><span className="mt-1 block text-xs font-normal text-muted">At least 8 characters, one uppercase letter and one number.</span></label><Button className="w-full" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</Button><p className="mt-5 text-center text-sm text-muted">Already registered? <Link className="font-semibold text-brand" to="/login">Sign in</Link></p></form></main> }
+
+export function RegisterPage() {
+  const { register } = useAuth()
+  const navigate = useNavigate()
+  const [error, setError] = useState('')
+  const [created, setCreated] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    setBusy(true)
+    setError('')
+    try {
+      await register(String(form.get('firstName')), String(form.get('lastName')), String(form.get('email')), String(form.get('password')))
+      setCreated(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to create account')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (created) {
+    return (
+      <div className="surface-grid grid min-h-screen place-items-center bg-[#f3f0e8] px-6 py-12">
+        <section className="w-full max-w-[400px] rounded-2xl border border-[#e7e3d9] bg-[#fbfaf6] p-8 text-center shadow-[0_1px_3px_rgba(37,41,35,.05)]">
+          <span className="font-display text-2xl font-extrabold tracking-[-.06em] text-[#252923]">NORTH<span className="text-[#a7654b]">.</span></span>
+          <h1 className="mt-6 font-display text-[26px] font-extrabold tracking-[-.04em] text-[#252923]">Check your email</h1>
+          <p className="mt-2 text-[14px] text-[#77796f]">
+            Your account is created. Verify your email before signing in.
+          </p>
+          <Button className="mt-6 bg-[#252923] text-[#f8f6f0] hover:bg-[#394235]" onClick={() => navigate('/login')}>
+            Go to sign in
+          </Button>
+        </section>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid min-h-screen lg:grid-cols-2">
+      <aside className="relative hidden flex-col justify-between bg-[#252923] px-12 py-14 text-[#f8f6f0] lg:flex">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-xl bg-[#f8f6f0] font-display text-xl font-extrabold text-[#252923]">N</span>
+          <span className="font-display text-2xl font-extrabold tracking-[-.06em]">NORTH<span className="text-[#a7654b]">.</span></span>
+        </div>
+        <div>
+          <p className="font-display text-[44px] font-extrabold leading-[1.08] tracking-[-.04em]">
+            Open a calmer<br />account today.
+          </p>
+          <p className="mt-6 max-w-sm text-[15px] leading-relaxed text-[#b8bcb1]">
+            Your checking account starts with ₹1,000. No noise, no pressure &mdash; just a better way to manage your money.
+          </p>
+        </div>
+        <p className="text-[11px] font-semibold uppercase tracking-[.18em] text-[#6b6e63]">North banking &middot; 2026</p>
+      </aside>
+
+      <main className="surface-grid flex items-center justify-center bg-[#f3f0e8] px-6 py-12">
+        <form onSubmit={submit} className="w-full max-w-[400px] rounded-2xl border border-[#e7e3d9] bg-[#fbfaf6] p-8 shadow-[0_1px_3px_rgba(37,41,35,.05)]">
+          <div className="mb-6 lg:hidden">
+            <span className="font-display text-2xl font-extrabold tracking-[-.06em] text-[#252923]">NORTH<span className="text-[#a7654b]">.</span></span>
+          </div>
+          <h1 className="font-display text-[26px] font-extrabold tracking-[-.04em] text-[#252923]">Create your account</h1>
+          <p className="mt-2 text-[14px] text-[#77796f]">Your checking account starts with ₹1,000.</p>
+
+          {error && <p className="mt-5 rounded-xl bg-[#f3e4de] px-4 py-3 text-[13px] font-medium text-[#8a3f25]">{error}</p>}
+
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <label className="text-[13px] font-semibold text-[#252923]">
+              First name
+              <Input className="mt-1.5 border-[#e0dccf] bg-[#fbfaf6] focus:border-[#a7654b] focus:ring-[#a7654b]/15" name="firstName" required />
+            </label>
+            <label className="text-[13px] font-semibold text-[#252923]">
+              Last name
+              <Input className="mt-1.5 border-[#e0dccf] bg-[#fbfaf6] focus:border-[#a7654b] focus:ring-[#a7654b]/15" name="lastName" required />
+            </label>
+          </div>
+          <label className="mt-5 block text-[13px] font-semibold text-[#252923]">
+            Email
+            <Input className="mt-1.5 border-[#e0dccf] bg-[#fbfaf6] focus:border-[#a7654b] focus:ring-[#a7654b]/15" name="email" type="email" required />
+          </label>
+          <label className="mt-5 block text-[13px] font-semibold text-[#252923]">
+            Password
+            <Input className="mt-1.5 border-[#e0dccf] bg-[#fbfaf6] focus:border-[#a7654b] focus:ring-[#a7654b]/15" name="password" type="password" minLength={8} required />
+            <span className="mt-1 block text-[12px] font-normal text-[#77796f]">At least 8 characters, one uppercase letter and one number.</span>
+          </label>
+
+          <Button className="mt-7 w-full bg-[#252923] text-[#f8f6f0] hover:bg-[#394235]" disabled={busy}>
+            {busy ? 'Creating…' : 'Create account'}
+          </Button>
+
+          <p className="mt-5 text-center text-[13px] text-[#77796f]">
+            Already registered?{' '}
+            <Link className="font-semibold text-[#a7654b] hover:text-[#8a503b]" to="/login">
+              Sign in
+            </Link>
+          </p>
+        </form>
+      </main>
+    </div>
+  )
+}
