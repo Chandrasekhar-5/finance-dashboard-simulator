@@ -1,3 +1,4 @@
+import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
@@ -6,4 +7,61 @@ import { RegisterPage } from '@/features/auth/RegisterPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { ActivityPage } from '@/features/activity/ActivityPage'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
-export default function App() { return <BrowserRouter><Routes><Route path="/login" element={<LoginPage />} /><Route path="/register" element={<RegisterPage />} /><Route path="/oauth-callback" element={<OAuthCallbackPage />} /><Route element={<ProtectedRoute />}><Route element={<DashboardLayout />}><Route path="/dashboard" element={<DashboardPage />} /><Route path="/activity" element={<ActivityPage />} /></Route></Route><Route path="*" element={<Navigate to="/dashboard" replace />} /></Routes></BrowserRouter> }
+
+interface AppErrorBoundaryProps { children: ReactNode }
+interface AppErrorBoundaryState { hasError: boolean }
+
+class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
+  state: AppErrorBoundaryState = { hasError: false }
+
+  static getDerivedStateFromError(): AppErrorBoundaryState {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Application render error', error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="grid min-h-screen place-items-center bg-[#f3f0e8] px-6 text-[#252923]">
+          <section className="w-full max-w-md rounded-2xl border border-[#e7e3d9] bg-[#fbfaf6] p-8 text-center shadow-[0_1px_3px_rgba(37,41,35,.05)]">
+            <span className="font-display text-2xl font-extrabold tracking-[-.06em]">NORTH<span className="text-[#a7654b]">.</span></span>
+            <h1 className="mt-6 font-display text-xl font-extrabold">We couldn&apos;t load this page</h1>
+            <p className="mt-2 text-sm text-[#77796f]">Refresh the page to try again.</p>
+            <button
+              className="mt-6 rounded-lg bg-[#252923] px-5 py-2.5 text-sm font-semibold text-[#f8f6f0] hover:bg-[#394235]"
+              onClick={() => window.location.reload()}
+            >
+              Refresh page
+            </button>
+          </section>
+        </main>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
+export default function App() {
+  return (
+    <AppErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
+          <Route element={<ProtectedRoute />}>
+            <Route element={<DashboardLayout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/activity" element={<ActivityPage />} />
+            </Route>
+          </Route>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AppErrorBoundary>
+  )
+}
