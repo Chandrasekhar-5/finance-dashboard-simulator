@@ -3,12 +3,14 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ApiError } from '@/lib/api'
 
 export function LoginPage() {
   const { login, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [error, setError] = useState('')
+  const [unverifiedEmail, setUnverifiedEmail] = useState('')
   const [busy, setBusy] = useState(false)
 
   if (user) return <Navigate to="/dashboard" replace />
@@ -16,12 +18,15 @@ export function LoginPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
+    const email = String(form.get('email'))
     setBusy(true)
     setError('')
+    setUnverifiedEmail('')
     try {
-      await login(String(form.get('email')), String(form.get('password')))
+      await login(email, String(form.get('password')))
       navigate('/dashboard', { replace: true })
     } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 403) setUnverifiedEmail(email)
       setError(cause instanceof Error ? cause.message : 'Unable to sign in')
     } finally {
       setBusy(false)
@@ -62,7 +67,14 @@ export function LoginPage() {
             </p>
           )}
           {error && (
-            <p className="mt-5 rounded-xl bg-[#f3e4de] px-4 py-3 text-[13px] font-medium text-[#8a3f25]">{error}</p>
+            <div className="mt-5 rounded-xl bg-[#f3e4de] px-4 py-3 text-[13px] font-medium text-[#8a3f25]">
+              <p>{error}</p>
+              {unverifiedEmail && (
+                <Link className="mt-1.5 inline-block font-semibold text-[#a7654b] hover:text-[#8a503b]" to="/verify-email" state={{ email: unverifiedEmail }}>
+                  Resend verification email
+                </Link>
+              )}
+            </div>
           )}
 
           <label className="mt-6 block text-[13px] font-semibold text-[#252923]">

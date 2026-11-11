@@ -8,39 +8,22 @@ export function RegisterPage() {
   const { register } = useAuth()
   const navigate = useNavigate()
   const [error, setError] = useState('')
-  const [created, setCreated] = useState(false)
   const [busy, setBusy] = useState(false)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
+    const email = String(form.get('email'))
     setBusy(true)
     setError('')
     try {
-      await register(String(form.get('firstName')), String(form.get('lastName')), String(form.get('email')), String(form.get('password')))
-      setCreated(true)
+      await register(String(form.get('firstName')), String(form.get('lastName')), email, String(form.get('password')))
+      navigate('/verify-email', { replace: true, state: { email } })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to create account')
     } finally {
       setBusy(false)
     }
-  }
-
-  if (created) {
-    return (
-      <div className="surface-grid grid min-h-screen place-items-center bg-[#f3f0e8] px-6 py-12">
-        <section className="w-full max-w-[400px] rounded-2xl border border-[#e7e3d9] bg-[#fbfaf6] p-8 text-center shadow-[0_1px_3px_rgba(37,41,35,.05)]">
-          <span className="font-display text-2xl font-extrabold tracking-[-.06em] text-[#252923]">NORTH<span className="text-[#a7654b]">.</span></span>
-          <h1 className="mt-6 font-display text-[26px] font-extrabold tracking-[-.04em] text-[#252923]">Check your email</h1>
-          <p className="mt-2 text-[14px] text-[#77796f]">
-            Your account is created. Verify your email before signing in.
-          </p>
-          <Button className="mt-6 bg-[#252923] text-[#f8f6f0] hover:bg-[#394235]" onClick={() => navigate('/login')}>
-            Go to sign in
-          </Button>
-        </section>
-      </div>
-    )
   }
 
   return (

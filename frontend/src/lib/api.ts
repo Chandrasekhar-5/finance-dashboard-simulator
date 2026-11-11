@@ -61,4 +61,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ token, newPassword }),
     }),
+  resendVerification: (email: string) =>
+    request<unknown>('/auth/verify-email/resend', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
 }
