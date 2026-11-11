@@ -46,10 +46,14 @@ export function DashboardPage() {
     [accounts, selectedId],
   )
 
-  const totalBalance = useMemo(
-    () => accounts.reduce((sum, a) => sum + Number(a.balance), 0),
-    [accounts],
-  )
+  const totalsByCurrency = useMemo(() => {
+    const groups = new Map<string, number>()
+    for (const a of accounts) {
+      if (a.status !== 'ACTIVE') continue
+      groups.set(a.currency, (groups.get(a.currency) ?? 0) + Number(a.balance))
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [accounts])
 
   const activeCount = useMemo(
     () => accounts.filter(a => a.status === 'ACTIVE').length,
@@ -77,7 +81,7 @@ export function DashboardPage() {
     setLoadingTxns(true)
     api
       .transactionHistory(selectedAccount.id)
-      .then(result => setTransactions(Array.isArray(result) ? result : []))
+      .then(result => setTransactions(result.data))
       .catch(cause => setTxnError(cause instanceof Error ? cause.message : 'Unable to load activity'))
       .finally(() => setLoadingTxns(false))
   }, [selectedAccount])
@@ -122,11 +126,18 @@ export function DashboardPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-[13px] text-[#b8bcb1]">Total balance</p>
-              <p className="mt-2 font-display text-[34px] font-extrabold tracking-[-.04em]">
-                {showBalance ? formatMoney(totalBalance, accounts[0]?.currency ?? 'INR') : MASKED}
-              </p>
+              <div className="mt-2 space-y-1.5">
+                {totalsByCurrency.length === 0 ? (
+                  <p className="font-display text-[34px] font-extrabold tracking-[-.04em]">{showBalance ? formatMoney(0, 'INR') : MASKED}</p>
+                ) : totalsByCurrency.map(([currency, total]) => (
+                  <p key={currency} className="font-display text-[34px] font-extrabold leading-tight tracking-[-.04em]">
+                    {showBalance ? formatMoney(total, currency) : MASKED}
+                    {totalsByCurrency.length > 1 && <span className="ml-2 text-[14px] font-semibold text-[#b8bcb1]">{currency}</span>}
+                  </p>
+                ))}
+              </div>
               <p className="mt-3 text-[13px] text-[#8b8e83]">
-                Across {accounts.length} account{accounts.length > 1 ? 's' : ''}
+                Across {activeCount} active account{activeCount !== 1 ? 's' : ''}
               </p>
             </div>
             <button

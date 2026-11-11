@@ -22,7 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { api, authToken } from '@/lib/api'
+import { api } from '@/lib/api'
 import { useAuth } from '@/features/auth/AuthProvider'
 import type { Session } from '@/types/api'
 
@@ -99,7 +99,6 @@ export function SecurityPage() {
       // If the user revoked their own current session, the access token is
       // now invalid. Clear local auth state and redirect to login.
       if (session.deviceId && currentDeviceId && session.deviceId === currentDeviceId) {
-        authToken.set(null)
         await logout()
         navigate('/login', { replace: true })
         return
@@ -119,7 +118,6 @@ export function SecurityPage() {
     try {
       await api.logoutAll()
       // All sessions are now invalid — clear local auth state and redirect.
-      authToken.set(null)
       await logout()
       navigate('/login', { replace: true })
     } catch (cause) {
@@ -175,7 +173,6 @@ export function SecurityPage() {
       {/* Change password */}
       <ChangePasswordForm
         onSuccess={async () => {
-          authToken.set(null)
           await logout()
           navigate('/login', { replace: true })
         }}
