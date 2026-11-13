@@ -17,7 +17,7 @@ export class ApiError extends Error { readonly status: number; constructor(messa
 export const authToken = { set: (token: string | null) => { accessToken = token } }
 function getDeviceId() { const key = 'banking-device-id'; let id = localStorage.getItem(key); if (!id) { id = crypto.randomUUID(); localStorage.setItem(key, id) }; return id }
 
-async function send<B>(path: string, init: RequestInit = {}, retry = true): Promise<B> {
+async function send<B>(path: string, init: RequestInit = {}, retry = true): Promise<B | null> {
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
   headers.set('X-Device-Id', getDeviceId())
@@ -30,11 +30,12 @@ async function send<B>(path: string, init: RequestInit = {}, retry = true): Prom
   }
   const body = await response.json().catch(() => null) as ApiEnvelope<unknown> | ApiErrorBody | null
   if (!response.ok) throw new ApiError((body && ('error' in body ? body.error : body.message)) || 'Request failed', response.status)
-  return body as B
+  return (body as B) ?? null
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
-  const body = await send<ApiEnvelope<T>>(path, init, retry)
+  const body = await send<ApiEnvelope<T> | null>(path, init, retry)
+  if (!body || !('data' in body)) return undefined as unknown as T
   return body.data
 }
 
@@ -58,13 +59,16 @@ export const api = {
   exchangeOAuthTicket: (ticket: string) => request<TokenPayload>('/auth/oauth/exchange', { method: 'POST', body: JSON.stringify({ ticket }) }),
   accounts: () => request<Account[]>('/accounts'),
   account: (accountId: string) => request<Account>(`/accounts/${accountId}`),
-  transactionHistory: (accountId: string) =>
-    send<TransactionHistoryResponse>(`/transactions/history?${new URLSearchParams({ accountId, limit: '8' })}`),
-  transactionHistoryPage: (accountId: string, params: { cursor?: string; direction?: 'INCOMING' | 'OUTGOING' }) => {
+  transactionHistory: async (accountId: string) => {
+    const result = await send<TransactionHistoryResponse>(`/transactions/history?${new URLSearchParams({ accountId, limit: '8' })}`)
+    return result ?? { data: [], nextCursor: undefined }
+  },
+  transactionHistoryPage: async (accountId: string, params: { cursor?: string; direction?: 'INCOMING' | 'OUTGOING' }) => {
     const sp = new URLSearchParams({ accountId, limit: String(PAGE_SIZE) })
     if (params.cursor) sp.set('cursor', params.cursor)
     if (params.direction) sp.set('direction', params.direction)
-    return send<TransactionHistoryResponse>(`/transactions/history?${sp}`)
+    const result = await send<TransactionHistoryResponse>(`/transactions/history?${sp}`)
+    return result ?? { data: [], nextCursor: undefined }
   },
   transfer: (payload: TransferRequest) =>
     request<TransferResult>('/transactions/transfer', {

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { AlertCircle, ArrowDownLeft, ArrowUpRight, CreditCard, Inbox, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AlertCircle, ArrowDownLeft, ArrowUpRight, CreditCard, Inbox, Loader2, X } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,11 @@ export function ActivityPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
 
+  // Monotonic request IDs guard against stale responses overwriting newer
+  // results when filters/accounts change quickly.
+  const accountsReqId = useRef(0)
+  const transactionsReqId = useRef(0)
+
   const selectedAccount = accounts.find(a => a.id === selectedId) ?? accounts[0]
 
   const fetchPage = useCallback(
@@ -51,15 +56,22 @@ export function ActivityPage() {
   )
 
   useEffect(() => {
+    const reqId = ++accountsReqId.current
     api
       .accounts()
       .then(items => {
+        if (reqId !== accountsReqId.current) return
         const safe = Array.isArray(items) ? items : []
         setAccounts(safe)
         if (safe.length > 0) setSelectedId(safe[0].id)
       })
-      .catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to load accounts'))
-      .finally(() => setLoadingInitial(false))
+      .catch(cause => {
+        if (reqId !== accountsReqId.current) return
+        setError(cause instanceof Error ? cause.message : 'Unable to load accounts')
+      })
+      .finally(() => {
+        if (reqId === accountsReqId.current) setLoadingInitial(false)
+      })
   }, [])
 
   useEffect(() => {
@@ -69,25 +81,35 @@ export function ActivityPage() {
       return
     }
 
+    // Clear stale errors whenever the filter or account changes.
     setError('')
     setLoadingInitial(true)
     setTransactions([])
     setNextCursor(undefined)
 
+    const reqId = ++transactionsReqId.current
     fetchPage(selectedAccount.id, filter)
       .then(result => {
+        if (reqId !== transactionsReqId.current) return
         setTransactions(result.data)
         setNextCursor(result.nextCursor)
       })
-      .catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to load activity'))
-      .finally(() => setLoadingInitial(false))
+      .catch(cause => {
+        if (reqId !== transactionsReqId.current) return
+        setError(cause instanceof Error ? cause.message : 'Unable to load activity')
+      })
+      .finally(() => {
+        if (reqId === transactionsReqId.current) setLoadingInitial(false)
+      })
   }, [selectedAccount, filter, fetchPage])
 
   function loadMore() {
     if (!selectedAccount || !nextCursor || loadingMore) return
     setLoadingMore(true)
+    const reqId = transactionsReqId.current
     fetchPage(selectedAccount.id, filter, nextCursor)
       .then(result => {
+        if (reqId !== transactionsReqId.current) return
         setTransactions(prev => [...prev, ...result.data])
         setNextCursor(result.nextCursor)
       })
@@ -211,7 +233,7 @@ export function ActivityPage() {
         ))}
       </div>
 
-      {error && transactions.length === 0 ? (
+      {error && transactions.length === 0 && !loadingInitial ? (
         <div className="flex items-center gap-3 rounded-xl bg-[#f3e4de] p-4 text-[13px] font-medium text-[#8a3f25]">
           <AlertCircle size={18} className="shrink-0" />
           <p>{error}</p>
@@ -243,6 +265,16 @@ export function ActivityPage() {
         </Card>
       ) : (
         <>
+          {error && transactions.length > 0 && (
+            <div className="mb-5 flex items-center gap-3 rounded-xl bg-[#f3e4de] p-4 text-[13px] font-medium text-[#8a3f25]">
+              <AlertCircle size={18} className="shrink-0" />
+              <p className="flex-1">{error}</p>
+              <button onClick={() => setError('')} className="shrink-0 rounded-lg p-1 hover:bg-[#e8d5cf]" aria-label="Dismiss">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           <Card className="overflow-hidden border-[#e7e3d9] bg-[#fbfaf6]">
             <ul>
               {transactions.map(item => (

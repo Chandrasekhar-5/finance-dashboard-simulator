@@ -236,7 +236,7 @@ export function AccountsPage() {
               <p className="text-[13px] font-medium text-[#8a3f25]">{detailError}</p>
             </Card>
           ) : detail ? (
-            <AccountDetail account={detail} showBalance={showBalances} onTransfer={() => navigate('/transfer')} />
+            <AccountDetail account={detail} showBalance={showBalances} onTransfer={() => navigate(`/transfer?from=${detail.id}`)} />
           ) : (
             <Card className="flex flex-col items-center gap-2 border-[#e7e3d9] bg-[#fbfaf6] p-10 text-center">
               <div className="grid size-10 place-items-center rounded-full bg-[#f1eee5] text-[#77796f]">

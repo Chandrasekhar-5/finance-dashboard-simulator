@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeftRight,
@@ -54,6 +54,7 @@ function friendlyError(err: unknown): string {
 
 export function TransferPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [accountError, setAccountError] = useState('')
@@ -77,16 +78,23 @@ export function TransferPage() {
   }, [])
 
   useEffect(() => {
+    const fromParam = searchParams.get('from')
     loadAccounts()
       .then(items => {
-        const active = (Array.isArray(items) ? items : []).filter(a => a.status === 'ACTIVE')
-        if (active.length > 0) {
+        const safe = Array.isArray(items) ? items : []
+        const active = safe.filter(a => a.status === 'ACTIVE')
+        // Preselect the account from the query param only if it belongs to
+        // this user and is active — the backend remains authoritative.
+        const paramMatch = fromParam ? active.find(a => a.id === fromParam) : undefined
+        if (paramMatch) {
+          setForm(f => ({ ...f, fromAccountId: paramMatch.id }))
+        } else if (active.length > 0) {
           setForm(f => ({ ...f, fromAccountId: active[0].id }))
         }
       })
       .catch(cause => setAccountError(cause instanceof Error ? cause.message : 'Unable to load accounts'))
       .finally(() => setLoadingAccounts(false))
-  }, [loadAccounts])
+  }, [loadAccounts, searchParams])
 
   const activeAccounts = useMemo(() => accounts.filter(a => a.status === 'ACTIVE'), [accounts])
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeftRight,
   Bell,
@@ -24,14 +24,31 @@ const navigation = [
   { label: 'Activity', to: '/activity', icon: ArrowLeftRight },
 ]
 
+const ROUTE_LABELS: Record<string, string> = {
+  '/dashboard': 'Overview',
+  '/accounts': 'Accounts',
+  '/transfer': 'Transfer',
+  '/activity': 'Activity',
+  '/security': 'Security',
+}
+
 export function DashboardLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
 
+  const routeLabel = ROUTE_LABELS[location.pathname] ?? 'Overview'
+
   async function signOut() {
-    await logout()
-    navigate('/login')
+    try {
+      await logout()
+    } catch {
+      // logout() already clears local auth state internally; navigate
+      // to login regardless of whether the server request succeeded.
+    } finally {
+      navigate('/login', { replace: true })
+    }
   }
 
   const initials = [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('').toUpperCase() || 'U'
@@ -91,7 +108,7 @@ export function DashboardLayout() {
           <div className="flex h-[76px] items-center justify-between px-5 sm:px-8 lg:px-11">
             <div className="flex items-center gap-3">
               <button className="rounded-lg p-2 text-[#555b4f] hover:bg-[#e9e6dc] lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={19} /></button>
-              <div className="hidden text-[11px] font-semibold uppercase tracking-[.16em] text-[#9a9b91] sm:block">Personal banking <span className="mx-2 text-[#c6c2b8]">/</span> <span className="text-[#555b4f]">Overview</span></div>
+              <div className="hidden text-[11px] font-semibold uppercase tracking-[.16em] text-[#9a9b91] sm:block">Personal banking <span className="mx-2 text-[#c6c2b8]">/</span> <span className="text-[#555b4f]">{routeLabel}</span></div>
               <span className="font-display text-lg font-extrabold tracking-[-.06em] lg:hidden">NORTH<span className="text-[#a7654b]">.</span></span>
             </div>
             <div className="flex items-center gap-3 sm:gap-5">

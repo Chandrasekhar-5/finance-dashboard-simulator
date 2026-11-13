@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowDownLeft,
@@ -40,6 +40,7 @@ export function DashboardPage() {
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [loadingTxns, setLoadingTxns] = useState(false)
   const [showBalance, setShowBalance] = useState(true)
+  const txnReqId = useRef(0)
 
   const selectedAccount = useMemo(
     () => accounts.find(a => a.id === selectedId) ?? accounts[0],
@@ -79,11 +80,20 @@ export function DashboardPage() {
     }
     setTxnError('')
     setLoadingTxns(true)
+    const reqId = ++txnReqId.current
     api
       .transactionHistory(selectedAccount.id)
-      .then(result => setTransactions(result.data))
-      .catch(cause => setTxnError(cause instanceof Error ? cause.message : 'Unable to load activity'))
-      .finally(() => setLoadingTxns(false))
+      .then(result => {
+        if (reqId !== txnReqId.current) return
+        setTransactions(result.data)
+      })
+      .catch(cause => {
+        if (reqId !== txnReqId.current) return
+        setTxnError(cause instanceof Error ? cause.message : 'Unable to load activity')
+      })
+      .finally(() => {
+        if (reqId === txnReqId.current) setLoadingTxns(false)
+      })
   }, [selectedAccount])
 
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
