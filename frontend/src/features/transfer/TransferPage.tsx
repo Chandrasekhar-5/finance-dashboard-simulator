@@ -67,6 +67,8 @@ export function TransferPage() {
   // Idempotency: one reference per logical transfer, reused across retries.
   const referenceRef = useRef<string>(crypto.randomUUID())
   const lastSubmittedRef = useRef<FormState | null>(null)
+  // Guard against a double click / re-entry between user action and stage flip.
+  const submittingRef = useRef(false)
 
   const loadAccounts = useCallback(async () => {
     const items = await api.accounts()
@@ -128,7 +130,7 @@ export function TransferPage() {
       const next = { ...prev, [key]: value }
       // Changing the logical transfer invalidates the previous reference,
       // unless we are mid-submission (reference must stay stable for retries).
-      if (stage !== 'submitting' && lastSubmittedRef.current && !shallowEqual(lastSubmittedRef.current, next)) {
+      if (!submittingRef.current && lastSubmittedRef.current && !shallowEqual(lastSubmittedRef.current, next)) {
         referenceRef.current = crypto.randomUUID()
       }
       return next
@@ -151,6 +153,7 @@ export function TransferPage() {
   function resetForNewTransfer() {
     referenceRef.current = crypto.randomUUID()
     lastSubmittedRef.current = null
+    submittingRef.current = false
     setForm(EMPTY_FORM)
     setTouched({})
     setSubmitError('')
@@ -169,6 +172,8 @@ export function TransferPage() {
   }
 
   async function executeTransfer() {
+    if (submittingRef.current) return
+    submittingRef.current = true
     setStage('submitting')
     setSubmitError('')
     // Freeze the form snapshot that this reference belongs to.
@@ -199,6 +204,8 @@ export function TransferPage() {
         // Network/business failure: keep the same reference so a retry is idempotent.
         setStage('confirm')
       }
+    } finally {
+      submittingRef.current = false
     }
   }
 

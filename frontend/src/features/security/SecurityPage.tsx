@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
@@ -76,6 +76,15 @@ export function SecurityPage() {
     setSessions(Array.isArray(data) ? data : [])
   }, [])
 
+  // Sessions are ordered newest-first by the backend. Mark only the most
+  // recent session for this device as current, so multiple logins from the
+  // same browser don't all appear as "this device".
+  const currentSessionId = useMemo(() => {
+    if (!currentDeviceId) return null
+    const match = sessions.find(s => s.deviceId === currentDeviceId)
+    return match ? match.id : null
+  }, [sessions, currentDeviceId])
+
   useEffect(() => {
     loadSessions()
       .catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to load sessions'))
@@ -98,7 +107,7 @@ export function SecurityPage() {
 
       // If the user revoked their own current session, the access token is
       // now invalid. Clear local auth state and redirect to login.
-      if (session.deviceId && currentDeviceId && session.deviceId === currentDeviceId) {
+      if (session.id === currentSessionId) {
         await logout()
         navigate('/login', { replace: true })
         return
@@ -216,7 +225,7 @@ export function SecurityPage() {
       ) : (
         <ul className="space-y-3">
           {sessions.map(session => {
-            const isCurrent = session.deviceId && currentDeviceId && session.deviceId === currentDeviceId
+            const isCurrent = session.id === currentSessionId
             const { label: deviceLabel, icon: DeviceIcon } = parseUserAgent(session.UserAgent)
             const browser = parseBrowser(session.UserAgent)
             const deviceName = session.deviceName || (browser ? `${browser} on ${deviceLabel}` : deviceLabel)
@@ -277,7 +286,7 @@ export function SecurityPage() {
         <ConfirmDialog
           title="Revoke this session?"
           message={
-            confirmRevoke.deviceId && currentDeviceId && confirmRevoke.deviceId === currentDeviceId
+            confirmRevoke.id === currentSessionId
               ? 'This is your current session. Revoking it will sign you out immediately and redirect you to the login page.'
               : 'This will sign out the selected device immediately. The user on that device will need to sign in again.'
           }

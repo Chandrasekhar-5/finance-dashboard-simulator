@@ -1,5 +1,5 @@
-import { type FormEvent, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +15,16 @@ function validatePassword(pw: string): string | null {
 
 export function ResetPasswordPage() {
   const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
+  const navigate = useNavigate()
+
+  // Read the token once into memory, then strip it from the URL so it does not
+  // linger in browser history, server logs, or the referrer header.
+  const tokenRef = useRef(params.get('token') ?? '')
+  const token = tokenRef.current
+
+  useEffect(() => {
+    if (params.has('token')) navigate('/reset-password', { replace: true })
+  }, [params, navigate])
 
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
